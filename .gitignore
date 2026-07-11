@@ -18,3 +18,7 @@ scratchpad/
 # vintage cartridge dump — not redistributed
 assets/URIPPER.PRG
 db/*.jsonl
+
+# python bytecode
+__pycache__/
+*.pyc

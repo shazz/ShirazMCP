@@ -113,12 +113,20 @@ fn confirm(mem: &MemImage, cand: usize) -> Option<Hit> {
     None
 }
 
-/// P2-pinned Capstone spellings of the two PSG ports (long + short forms).
+/// P2-pinned Capstone spellings of the two PSG ports (long, short, and
+/// 24-bit absolute forms — the ST decodes $FF8800 and $FFFF8800 alike).
 /// // verify live: re-pin against P2.md §6.2 table on any capstone bump.
 fn is_psg(ops: &str) -> bool {
-    ["$ffff8800", "$ffff8802", "$8800.w", "$8802.w"]
-        .iter()
-        .any(|t| ops.contains(t))
+    [
+        "$ffff8800",
+        "$ffff8802",
+        "$8800.w",
+        "$8802.w",
+        "$ff8800",
+        "$ff8802",
+    ]
+    .iter()
+    .any(|t| ops.contains(t))
 }
 
 /// §4.2 step 3. Input order arbitrary; output sorted by start.
@@ -202,6 +210,38 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].offset, Offset::new(0));
         assert_eq!(findings[0].len, 18);
+    }
+
+    /// Pins the Capstone spelling the P24 §6 24-bit `is_psg` tokens depend
+    /// on (`move.b #7,$FF8800.l` and `lea $FF8800.l,a0`).
+    #[test]
+    fn capstone_spells_24bit_psg() {
+        let mv = MemImage::new(
+            vec![0x13, 0xFC, 0x00, 0x07, 0x00, 0xFF, 0x88, 0x00],
+            Addr::new(0),
+        );
+        let insns = disasm(&mv, mv.base(), 1).unwrap();
+        assert!(is_psg(&insns[0].ops), "ops was {:?}", insns[0].ops);
+
+        let lea = MemImage::new(vec![0x41, 0xF9, 0x00, 0xFF, 0x88, 0x00], Addr::new(0));
+        let insns = disasm(&lea, lea.base(), 1).unwrap();
+        assert!(is_psg(&insns[0].ops), "ops was {:?}", insns[0].ops);
+    }
+
+    /// A 24-bit-only replay block (P24 §5.2 whittaker-mute excerpt) is
+    /// invisible to `find_candidates`+`confirm` without the §6 fix.
+    #[test]
+    fn whittaker_24bit_block_scanned() {
+        let bytes = vec![
+            0x13, 0xFC, 0x00, 0x07, 0x00, 0xFF, 0x88, 0x00, 0x12, 0x39, 0x00, 0xFF, 0x88, 0x00,
+            0x00, 0x01, 0x00, 0x3F, 0x13, 0xC1, 0x00, 0xFF, 0x88, 0x02,
+        ];
+        let mem = MemImage::new(bytes, Addr::new(0x10000));
+        let findings = YmPlayer.scan(&mem);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].offset, Offset::new(0));
+        assert_eq!(findings[0].len, 24);
+        assert_eq!(findings[0].label, format_label("David Whittaker", 0.85, 3));
     }
 
     #[test]

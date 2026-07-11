@@ -9,6 +9,11 @@
 //! a 2-decimal literal > `CONF_ANCHOR_ONLY`. Unknown still degrades to
 //! ("unknown", 0.25) in the matcher — a wrong or dead entry here can only
 //! ever produce "unknown", never a wrong name.
+//!
+//! P24 (ADR-41) scaled the DB against the SNDH archive (refs/sndh_lf,
+//! gitignored, fetch recipe refs/README.md); methodology: P19.md §4.1 +
+//! P24.md §4 (group discrimination — beware wrapper shims, the archive's
+//! most frequent PSG gadgets). Corpus regression: `tests/ym_sig_corpus.rs`.
 
 use super::ym_signatures::{SigScope, SigWord, Signature};
 
@@ -42,6 +47,136 @@ pub const SIGNATURES: &[Signature] = &[
             w(0x4CDF, 0xFFFF),
             w(0x0701, 0xFFFF),
             w(0x4E75, 0xFFFF),
+        ],
+    },
+    // quartet-mute — mixer mute (Grazey's "Multi Quartet Player" shell
+    // around the Quartet engine). Source: 607/Good_Old_Times.sndh@0xd80; 293 files.
+    Signature {
+        player: "Quartet",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.85,
+        pattern: &[
+            w(0x3F00, 0xFFFF),
+            w(0x11FC, 0xFFFF),
+            w(0x0007, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x103C, 0xFFFF),
+            w(0x0007, 0xFFFF),
+            w(0x8038, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x11C0, 0xFFFF),
+            w(0x8802, 0xFFFF),
+            w(0x301F, 0xFFFF),
+            w(0x4E75, 0xFFFF),
+        ],
+    },
+    // whittaker-mute — read mixer, ori.b #$3F (all tone+noise off), store;
+    // 24-bit operands. Source: Whittaker_David/APB.sndh@0x528; 61 files.
+    Signature {
+        player: "David Whittaker",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.85,
+        pattern: &[
+            w(0x13FC, 0xFFFF),
+            w(0x0007, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x1239, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x0001, 0xFFFF),
+            w(0x003F, 0xFFFF),
+            w(0x13C1, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8802, 0xFFFF),
+        ],
+    },
+    // tcb-clear — dbf loop zeroing R13..R0 — the replay *code* fingerprint
+    // (tcb-dot/-bang below are module magic). Source: Count_Zero/Awesome.sndh@0x322; 22 files.
+    Signature {
+        player: "TCB Tracker",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.85,
+        pattern: &[
+            w(0x700D, 0xFFFF),
+            w(0x11C0, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x11FC, 0xFFFF),
+            w(0x0000, 0xFFFF),
+            w(0x8802, 0xFFFF),
+            w(0x51C8, 0xFFFF),
+            w(0xFFF4, 0xFFFF),
+            w(0x11FC, 0xFFFF),
+            w(0x0007, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x11C1, 0xFFFF),
+            w(0x8802, 0xFFFF),
+            w(0x4E75, 0xFFFF),
+        ],
+    },
+    // hippel-runl — movem.l $1C(a6),d0-d3, 4-long unrolled PSG blast; $001C
+    // is literal (byte-identical in 174 hits). Source: Mad_Max/Car_Race.sndh@0x1e8; 174 files.
+    Signature {
+        player: "Jochen Hippel (Mad Max)",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.85,
+        pattern: &[
+            w(0x4CEE, 0xFFFF),
+            w(0x000F, 0xFFFF),
+            w(0x001C, 0xFFFF),
+            w(0x21C0, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x21C1, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x21C2, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x21C3, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x4E75, 0xFFFF),
+        ],
+    },
+    // hippel-loop24 — dbf loop writing R12..R0, 24-bit operands (needs
+    // is_psg fix, §6, to anchor live). Source:
+    // Mad_Max/Demos/Best_In_Galaxy/Ace_2.sndh@0xdc2; 130 files.
+    Signature {
+        player: "Jochen Hippel (Mad Max)",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.85,
+        pattern: &[
+            w(0x303C, 0xFFFF),
+            w(0x000C, 0xFFFF),
+            w(0x13C0, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x13E0, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8802, 0xFFFF),
+            w(0x51C8, 0xFFFF),
+            w(0xFFF2, 0xFFFF),
+            w(0x4E75, 0xFFFF),
+        ],
+    },
+    // follin-mixer — masked mixer update (andi.b #$C0/#$3F, or.b, store),
+    // 24-bit operands. Source: Follin_Tim/Bionic_Commando.sndh@0xd1a; 6 files.
+    Signature {
+        player: "Tim Follin",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.85,
+        pattern: &[
+            w(0x13C0, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x1239, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x0201, 0xFFFF),
+            w(0x00C0, 0xFFFF),
+            w(0x0202, 0xFFFF),
+            w(0x003F, 0xFFFF),
+            w(0x8202, 0xFFFF),
+            w(0x13C1, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8802, 0xFFFF),
         ],
     },
     // hippel-movem-w — movem.l d0-d3,$8800.w, rts (the Mad Max 4-long PSG
@@ -96,6 +231,94 @@ pub const SIGNATURES: &[Signature] = &[
             w(0x4E75, 0xFFFF),
         ],
     },
+    // whittaker-read — read mixer, move.b d16(pc),d3 (opcode word only —
+    // displacement is layout-dependent, deliberately unmasked/excluded).
+    // Source: Whittaker_David/APB.sndh@0x4f2; 61 files.
+    Signature {
+        player: "David Whittaker",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.82,
+        pattern: &[
+            w(0x13FC, 0xFFFF),
+            w(0x0007, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x1039, 0xFFFF),
+            w(0x00FF, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x163A, 0xFFFF),
+        ],
+    },
+    // jess-init — movem save, lea $8800.w,a0, mask IRQs before the
+    // register loop. Source: Jess/A_Sixties_Slow.sndh@0x1a0; 54 files.
+    Signature {
+        player: "Jess (Overlanders)",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.82,
+        pattern: &[
+            w(0x48E7, 0xFFFF),
+            w(0xC080, 0xFFFF),
+            w(0x700D, 0xFFFF),
+            w(0x41F8, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x40E7, 0xFFFF),
+            w(0x7200, 0xFFFF),
+            w(0x46FC, 0xFFFF),
+            w(0x2700, 0xFFFF),
+        ],
+    },
+    // tao-silence — select R10, volume C := 0, then a state-flag store.
+    // Source: Tao/13_(UCM_13).sndh@0x396; 132 files (Tao + 2 collabs).
+    Signature {
+        player: "Tao (tSCc)",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.82,
+        pattern: &[
+            w(0x21FC, 0xFFFF),
+            w(0x0A00, 0xFFFF),
+            w(0x0000, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x397C, 0xFFFF),
+            w(0x0001, 0xFFFF),
+            w(0x0010, 0xFFFF),
+            w(0x4E75, 0xFFFF),
+        ],
+    },
+    // bigalec-blast — head of a 14-register PSG blast (Hippel-style; 4CD0
+    // literal, only (a0) observed). Source: Big_Alec/A_Case_For_Two.sndh@0x34a; 18 files.
+    Signature {
+        player: "Big Alec",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.82,
+        pattern: &[
+            w(0x4CD0, 0xFFFF),
+            w(0x3FFF, 0xFFFF),
+            w(0x21C8, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x21C9, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x21CA, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x21CB, 0xFFFF),
+            w(0x8800, 0xFFFF),
+        ],
+    },
+    // musicmon-env — pc-relative song-data read (displacement masked),
+    // envelope shape from data. Source: Vidovic_Augustin/Music_Mon_Intro.sndh@0x5dc; 26 files.
+    Signature {
+        player: "Music Mon",
+        scope: SigScope::AnchorWindow,
+        confidence: 0.82,
+        pattern: &[
+            w(0x363A, 0xFFFF),
+            w(0x0000, 0x0000),
+            w(0x11FC, 0xFFFF),
+            w(0x000D, 0xFFFF),
+            w(0x8800, 0xFFFF),
+            w(0x11C3, 0xFFFF),
+            w(0x8802, 0xFFFF),
+        ],
+    },
     // tcb-dot — ASCII "AN COOL." (unchanged bytes from P6, provenance
     // upgraded from documented to corpus-cited); source: first 8 bytes of
     // Atari_ST_Sources/ASM/Adrenalin U.K (ADR)/ADR34/TCB.MOD (+
@@ -128,10 +351,10 @@ pub const SIGNATURES: &[Signature] = &[
     },
     // rg-triplex — move.l a5,-(sp), move.l #$0AFF00FF,$8800.w (select R10,
     // volume C := 0), lea next_timer(pc),a5 (displacement masked), move.l
-    // a5,$134.w (re-arm Timer-A vector) — the SID-voice timer chain;
-    // hand-assembled from Atari_ST_Sources/ASM/Reservoir Gods (RG)/
-    // TRIPLEX.2K4/SNDH/DRIVER.S sound_timer1a..4a (~line 1113 ff.); no
-    // binary available — // hand-assembled, verify live
+    // a5,$134.w (re-arm Timer-A vector) — the SID-voice timer chain, from
+    // ASM/Reservoir Gods (RG)/TRIPLEX.2K4/SNDH/DRIVER.S sound_timer1a..4a;
+    // corpus-verified against Damo/YM_Rucka.sndh@0xb64 (Damo is Reservoir
+    // Gods); confidence stays 0.70 (still a single observed binary)
     Signature {
         player: "Reservoir Gods driver",
         scope: SigScope::AnchorWindow,
@@ -195,6 +418,78 @@ mod tests {
     }
 
     #[test]
+    fn quartet_mute_matches_corpus_excerpt() {
+        // 607/Good_Old_Times.sndh@0xd80
+        let buf = [
+            0x3F, 0x00, 0x11, 0xFC, 0x00, 0x07, 0x88, 0x00, 0x10, 0x3C, 0x00, 0x07, 0x80, 0x38,
+            0x88, 0x00, 0x11, 0xC0, 0x88, 0x02, 0x30, 0x1F, 0x4E, 0x75,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "Quartet");
+        assert!((id.confidence - 0.85).abs() < 1e-6);
+    }
+
+    #[test]
+    fn whittaker_mute_matches_corpus_excerpt() {
+        // Whittaker_David/APB.sndh@0x528
+        let buf = [
+            0x13, 0xFC, 0x00, 0x07, 0x00, 0xFF, 0x88, 0x00, 0x12, 0x39, 0x00, 0xFF, 0x88, 0x00,
+            0x00, 0x01, 0x00, 0x3F, 0x13, 0xC1, 0x00, 0xFF, 0x88, 0x02,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "David Whittaker");
+        assert!((id.confidence - 0.85).abs() < 1e-6);
+    }
+
+    #[test]
+    fn tcb_clear_matches_corpus_excerpt() {
+        // Count_Zero/Awesome.sndh@0x322
+        let buf = [
+            0x70, 0x0D, 0x11, 0xC0, 0x88, 0x00, 0x11, 0xFC, 0x00, 0x00, 0x88, 0x02, 0x51, 0xC8,
+            0xFF, 0xF4, 0x11, 0xFC, 0x00, 0x07, 0x88, 0x00, 0x11, 0xC1, 0x88, 0x02, 0x4E, 0x75,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "TCB Tracker");
+        assert!((id.confidence - 0.85).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hippel_runl_matches_corpus_excerpt() {
+        // Mad_Max/Car_Race.sndh@0x1e8
+        let buf = [
+            0x4C, 0xEE, 0x00, 0x0F, 0x00, 0x1C, 0x21, 0xC0, 0x88, 0x00, 0x21, 0xC1, 0x88, 0x00,
+            0x21, 0xC2, 0x88, 0x00, 0x21, 0xC3, 0x88, 0x00, 0x4E, 0x75,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "Jochen Hippel (Mad Max)");
+        assert!((id.confidence - 0.85).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hippel_loop24_matches_corpus_excerpt() {
+        // Mad_Max/Demos/Best_In_Galaxy/Ace_2.sndh@0xdc2
+        let buf = [
+            0x30, 0x3C, 0x00, 0x0C, 0x13, 0xC0, 0x00, 0xFF, 0x88, 0x00, 0x13, 0xE0, 0x00, 0xFF,
+            0x88, 0x02, 0x51, 0xC8, 0xFF, 0xF2, 0x4E, 0x75,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "Jochen Hippel (Mad Max)");
+        assert!((id.confidence - 0.85).abs() < 1e-6);
+    }
+
+    #[test]
+    fn follin_mixer_matches_corpus_excerpt() {
+        // Follin_Tim/Bionic_Commando.sndh@0xd1a
+        let buf = [
+            0x13, 0xC0, 0x00, 0xFF, 0x88, 0x00, 0x12, 0x39, 0x00, 0xFF, 0x88, 0x00, 0x02, 0x01,
+            0x00, 0xC0, 0x02, 0x02, 0x00, 0x3F, 0x82, 0x02, 0x13, 0xC1, 0x00, 0xFF, 0x88, 0x02,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "Tim Follin");
+        assert!((id.confidence - 0.85).abs() < 1e-6);
+    }
+
+    #[test]
     fn hippel_movem_w_matches_corpus_excerpt() {
         // ASM/Various/Mug UK/JOCHEN.HIP/ATOMINO/ATOMINO1.MUS@0x17E
         let buf = [0x48, 0xF8, 0x00, 0x0F, 0x88, 0x00, 0x4E, 0x75];
@@ -223,6 +518,82 @@ mod tests {
         let id = identify(&buf, 0, buf.len());
         assert_eq!(id.player, "Jochen Hippel (Mad Max)");
         assert!((id.confidence - 0.82).abs() < 1e-6);
+    }
+
+    #[test]
+    fn whittaker_read_matches_corpus_excerpt() {
+        // Whittaker_David/APB.sndh@0x4f2 (observed displacement $0449)
+        let buf = [
+            0x13, 0xFC, 0x00, 0x07, 0x00, 0xFF, 0x88, 0x00, 0x10, 0x39, 0x00, 0xFF, 0x88, 0x00,
+            0x16, 0x3A, 0x04, 0x49,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "David Whittaker");
+        assert!((id.confidence - 0.82).abs() < 1e-6);
+    }
+
+    #[test]
+    fn jess_init_matches_corpus_excerpt() {
+        // Jess/A_Sixties_Slow.sndh@0x1a0
+        let buf = [
+            0x48, 0xE7, 0xC0, 0x80, 0x70, 0x0D, 0x41, 0xF8, 0x88, 0x00, 0x40, 0xE7, 0x72, 0x00,
+            0x46, 0xFC, 0x27, 0x00,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "Jess (Overlanders)");
+        assert!((id.confidence - 0.82).abs() < 1e-6);
+    }
+
+    #[test]
+    fn tao_silence_matches_corpus_excerpt() {
+        // Tao/13_(UCM_13).sndh@0x396
+        let buf = [
+            0x21, 0xFC, 0x0A, 0x00, 0x00, 0x00, 0x88, 0x00, 0x39, 0x7C, 0x00, 0x01, 0x00, 0x10,
+            0x4E, 0x75,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "Tao (tSCc)");
+        assert!((id.confidence - 0.82).abs() < 1e-6);
+    }
+
+    #[test]
+    fn bigalec_blast_matches_corpus_excerpt() {
+        // Big_Alec/A_Case_For_Two.sndh@0x34a
+        let buf = [
+            0x4C, 0xD0, 0x3F, 0xFF, 0x21, 0xC8, 0x88, 0x00, 0x21, 0xC9, 0x88, 0x00, 0x21, 0xCA,
+            0x88, 0x00, 0x21, 0xCB, 0x88, 0x00,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "Big Alec");
+        assert!((id.confidence - 0.82).abs() < 1e-6);
+    }
+
+    #[test]
+    fn musicmon_env_matches_corpus_excerpt() {
+        // Vidovic_Augustin/Music_Mon_Intro.sndh@0x5dc
+        let buf = [
+            0x36, 0x3A, 0x07, 0xF8, 0x11, 0xFC, 0x00, 0x0D, 0x88, 0x00, 0x11, 0xC3, 0x88, 0x02,
+        ];
+        let id = identify(&buf, 0, buf.len());
+        assert_eq!(id.player, "Music Mon");
+        assert!((id.confidence - 0.82).abs() < 1e-6);
+    }
+
+    #[test]
+    fn musicmon_displacement_masked() {
+        // Same excerpt with the displacement (bytes 2-3) patched to two
+        // different layout-dependent values — both must still match.
+        let base = [
+            0x36, 0x3A, 0x07, 0xF8, 0x11, 0xFC, 0x00, 0x0D, 0x88, 0x00, 0x11, 0xC3, 0x88, 0x02,
+        ];
+        for disp in [[0x01, 0x00], [0xFF, 0x2E]] {
+            let mut buf = base;
+            buf[2] = disp[0];
+            buf[3] = disp[1];
+            let id = identify(&buf, 0, buf.len());
+            assert_eq!(id.player, "Music Mon");
+            assert!((id.confidence - 0.82).abs() < 1e-6);
+        }
     }
 
     #[test]

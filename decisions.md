@@ -1904,3 +1904,51 @@ change (16/16 `ripper::snapshot` tests, 602/602 full lib suite, both live
 project's reusable pattern for any future "prove exact hardware-state
 resume" live test — poll-then-pause is not race-free against
 interrupt-driven state.
+
+## 2026-07-11 — ADR-41: SNDH-archive-derived YM driver fingerprints; 24-bit PSG anchor fix
+
+**Status:** accepted (extends ADR-16/ADR-35)
+**Context:** ADR-35 derived 9 signatures from local sources and named the
+SNDH archive (sndh.atari.org) as out of reach; it also flagged that
+`ym_player::is_psg` misses 24-bit `lea/move $FF8800.l` operands. The
+archive is now fetched locally (refs/sndh_lf, gitignored: 5,897 .sndh /
+678 composers / 269 MB, yearly zip, all files plain — no ICE depack
+needed). A whole-corpus scan grounded three facts: (1) the archive's most
+frequent PSG gadgets are shared rip-wrapper shims (placeholder operands
+DEAD/BA55CAFE), so frequency alone would fingerprint the wrapper, not the
+driver; (2) 274 files reach the PSG only via 24-bit operands and today
+produce no anchor at all; (3) the P19 module-magic TCB entries never occur
+in SNDH rips (0/5,897) — driver code and module files need separate
+signatures.
+**Decision:** (1) Methodology extended (P24.md §4) with a
+group-discrimination step: a gadget qualifies only with >=50% in-group file
+coverage and <=25 out-group files (deep mode 20%/60 for multi-version
+drivers), which mechanically rejects wrapper shims. (2) Eleven new
+corpus-cited entries (Quartet, David Whittaker x2, TCB replay code,
+Hippel x2, Tim Follin, Jess, Tao, Big Alec, Music Mon), each with
+file@offset provenance and a byte-pinned excerpt test; rg-triplex's
+hand-assembled encoding is now corpus-verified (Damo/YM_Rucka.sndh) but
+stays 0.70 (single binary). Best-match coverage on sndh2026: 1,796/5,897
+files (30.5%), per-player counts pinned. (3) `is_psg` gains the 24-bit
+spellings ($ff8800/$ff8802 tokens); BACKS unchanged (all attested 24-bit
+encodings sit within back-6). (4) The discovery pipeline is NOT shipped
+(re-affirming ADR-35: offline, few-times-a-year, ends in human
+decode/labeling); the validation half ships as the #[ignore]d
+tests/ym_sig_corpus.rs (env SHIRAZMCP_SNDH_CORPUS): provenance pins,
+exact best-match histogram, per-driver-dir exclusivity matrix — the
+false-positive grep, mechanized and re-runnable.
+**Alternatives considered:** committing a miner binary/xtask (rejected:
+dead weight between yearly archive drops); frequency-ranked signatures
+(rejected: names the Grazey/PHF wrapper across every driver); masking the
+hippel-runl $1C displacement and bigalec's 4CD0 register field (rejected:
+never observed varying — over-masking buys false positives); raising
+rg-triplex to 0.82 (rejected: one binary is not two).
+**Consequences:** identify_music names 11 engines instead of 5; Whittaker/
+Follin/late-Hippel rips in live RAM become findable at all (the 24-bit
+fix). Honest gaps remain and are documented in P24.md §10: ~69% of the
+archive (per-composer long tail), Rob Hubbard ST (6 heterogeneous files),
+Scavenger (gadgets too generic), Big Alec's other driver builds, Lucas/
+ProTracker-STk still absent. Corpus counts are pinned to sndh2026_lf; the
+yearly refresh re-pins the histogram. A wrong or dead entry still can only
+produce "unknown", never a wrong name — the ("unknown", 0.25) contract
+is unchanged and its tests pass unmodified.

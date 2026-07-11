@@ -128,7 +128,7 @@ ShirazMCP/
 │   │       ├── sndh_header.rs # SNDH header/tag parsing, pure over bytes (P6)
 │   │       ├── sndh.rs      # SNDH blob detector (P6)
 │   │       ├── ym_signatures.rs # masked-word fingerprint matcher (P6; DB in ym_sig_db.rs, P19)
-│   │       ├── ym_sig_db.rs     # corpus-derived signature entries + provenance (P19)
+│   │       ├── ym_sig_db.rs     # corpus-derived signature entries + provenance (P19 local sources; P24 SNDH archive, 20 entries)
 │   │       ├── ym_player.rs # $FFFF8800/02 anchor scan + clustering (P6, ADR-16)
 │   │       ├── boot_bpb.rs  # $1234 checksum + little-endian DOS BPB decode (P7)
 │   │       ├── boot_heur.rs # disasm-based virus-tell heuristics (P7, ADR-17)
@@ -202,6 +202,7 @@ ShirazMCP/
 └── tests/
     ├── integration.rs       # drives Hatari + ../MJJ demo end-to-end
     ├── bootsector.rs        # boot-sector checksum/BPB/heuristics fixtures (P7)
+    ├── ym_sig_corpus.rs     # ignored: SNDH-archive fingerprint regression (P24; needs refs/sndh_lf)
     ├── analyze_live.rs      # P2: disasm/profile/breakpoint/state against a live MJJ session
     ├── re_live.rs           # P14: watch/xrefs/run_frames against a live MJJ session (ignored)
     ├── cheat_live.rs        # P15: cheat_scan against a live MJJ session (ignored)
@@ -548,7 +549,12 @@ it.
 - **Player signature** — const masked-word fingerprint naming a replay driver;
   unknown always degrades to `("unknown", 0.25)`, never errors (P6, ADR-16).
   DB entries are corpus-derived with cited provenance (P19, ADR-35); adding
-  a driver = one const entry + one excerpt test in `ym_sig_db.rs`.
+  a driver = one const entry + one excerpt test in `ym_sig_db.rs`. P24
+  (ADR-41) scaled the DB against the SNDH archive (5,897 tunes,
+  refs/sndh_lf, gitignored): 20 entries naming 30.5% of the archive;
+  24-bit `$FF8800.l` accesses are now anchor-confirmed; the `#[ignore]`d
+  `ym_sig_corpus` test re-validates provenance, the best-match histogram,
+  and per-driver-dir exclusivity.
 - **Boot sector** — 512-byte logical sector 0; executable iff the big-endian
   word-sum equals `$1234`; classified plain-data / loader / suspicious by
   disasm-based heuristics — tells, never a verdict (P7, ADR-17).
