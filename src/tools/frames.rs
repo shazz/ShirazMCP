@@ -103,7 +103,7 @@ fn validate_frames(frames: u32) -> Result<(), McpError> {
 
 /// Absurd-but-checked overflow guard (§7.3 step 3): the VBL counter is a
 /// `u32`, so `cur + n - 1` must not wrap.
-fn check_vbl_headroom(cur: u32, frames: u32) -> Result<(), McpError> {
+pub(crate) fn check_vbl_headroom(cur: u32, frames: u32) -> Result<(), McpError> {
     if u64::from(cur) + u64::from(frames) <= u64::from(u32::MAX) {
         Ok(())
     } else {
@@ -111,7 +111,7 @@ fn check_vbl_headroom(cur: u32, frames: u32) -> Result<(), McpError> {
     }
 }
 
-async fn current_vbl(guard: &mut AnySession) -> Result<u32, McpError> {
+pub(crate) async fn current_vbl(guard: &mut AnySession) -> Result<u32, McpError> {
     let proc = guard
         .process_mut()
         .ok_or_else(|| to_mcp(Error::Session("no live session".to_string())))?;

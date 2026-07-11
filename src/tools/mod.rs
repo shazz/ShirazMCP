@@ -17,6 +17,8 @@ pub mod debugger;
 pub mod depack;
 pub mod extract;
 pub mod frames;
+pub mod profile_frame;
+pub(crate) mod profile_frame_wire;
 pub(crate) mod profile_wire;
 // `InsnOut` + the shared instruction-mapping helper, split out of
 // `analyze_wire.rs` (§7.2 fallback, P8) — used by `disasm` and `patch` readback.
@@ -126,6 +128,7 @@ impl HatariServer {
             + Self::music_router()
             + Self::analyze_router()
             + Self::profile_router()
+            + Self::profile_frame_router()
             + Self::breakpoint_router()
             + Self::bootsector_router()
             + Self::assemble_router()
@@ -168,7 +171,10 @@ impl ServerHandler for HatariServer {
                  Analyze: disasm (Capstone 68k over a snapshot, or Hatari \
                  live), profile (measured + blind/contended static cycles \
                  between two PCs, as raw cycles AND vbl_fraction / hbl_count \
-                 raster budget), breakpoint (managed one-shot \
+                 raster budget), profile_frame (per-frame measured cycles \
+                 over N whole VBL frames — min/avg/max + 50Hz fit + \
+                 headroom; from/to are an address FILTER for 'your code', \
+                 not a measurement window), breakpoint (managed one-shot \
                  run-to-break), state (save/load emulator snapshots). \
                  Status: machine_state \
                  (one-call frozen snapshot — CPU registers + SR flags, \

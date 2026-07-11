@@ -468,7 +468,12 @@ never written) decoded by `analyze::ym`; unlike `machine_state` it needs no
 momentary freeze because a single remote debugger command is coherent by
 construction (the ADR-33 no-freeze decision). `rip_sample` (P20) is the DMA
 sibling of `ym_state`: register-driven sample dump under the ADR-20
-momentary freeze, choreography-not-capability.
+momentary freeze, choreography-not-capability. P25 adds `profile_frame`:
+the frame-windowed sibling of `profile` — the measurement window is N
+single-VBL managed legs (`frames.rs` primitives) and the PC range is
+demoted to a pure address filter; one `profile save` per paused boundary
+exploits Hatari's reset-on-continue profiler semantics (ADR-42).
+Choreography-not-capability, like its siblings.
 
 ## Data Flow
 

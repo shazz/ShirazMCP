@@ -99,6 +99,14 @@ pub fn sum_range(entries: &[ProfiledAddr], from: Addr, to: Addr) -> (u64, u64) {
         .fold((0, 0), |(c, cy), e| (c + e.count, cy + e.cycles))
 }
 
+/// Sum (instructions, cycles) over ALL profiled addresses — the
+/// whole-window total (RAM + TOS + cartridge, incl. interrupt handlers).
+pub fn sum_all(entries: &[ProfiledAddr]) -> (u64, u64) {
+    entries
+        .iter()
+        .fold((0, 0), |(c, cy), e| (c + e.count, cy + e.cycles))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +183,14 @@ mod tests {
                 cycles: 180
             }
         );
+    }
+
+    #[test]
+    fn profile_sum_all() {
+        let entries = parse_profile_file(FIXTURE);
+        // 8 RAM-side lines (count=1 each => 8; cycles 8+4+4+12+16+16+12+12=84)
+        // plus 3 ROM-side lines (count=9 each => 27; cycles 72+90+180=342).
+        assert_eq!(sum_all(&entries), (8 + 27, 84 + 342));
     }
 
     #[test]

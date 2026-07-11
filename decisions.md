@@ -1952,3 +1952,73 @@ ProTracker-STk still absent. Corpus counts are pinned to sndh2026_lf; the
 yearly refresh re-pins the histogram. A wrong or dead entry still can only
 produce "unknown", never a wrong name — the ("unknown", 0.25) contract
 is unchanged and its tests pass unmodified.
+
+## 2026-07-11 — ADR-42: profile_frame — the measurement window is TIME (VBL frames); the PC range is demoted to an address filter
+
+**Status:** accepted
+**Context:** The `profile` tool bounds its measurement window with a PC
+pair (`run to from` → `run to to`), which cannot express "one whole frame"
+(natural start/end is the same loop PC and `to > from` is required) or
+"routine including bsr'd callees" (the natural exit PC sits below the
+entry). The effect-dev request (STEIsNotDead MCP_TODOS §1) asked for
+`profile_frame`, `profile_routine`, and/or `to < from` support. Reading the
+Hatari source settled the design — **against the binary ShirazMCP actually
+spawns**, `/usr/bin/hatari` (the distro package, stock v2.4.1;
+`src/session/spawn/mod.rs`, env `SHIRAZMCP_HATARI`), not the
+`tattlemuss/hrdb` fork checked out at `/home/matt/projects/hatari`'s HEAD.
+The spec was drafted against the fork's line numbers and re-verified
+against the `v2.4.1` tag in that same repo (`git show v2.4.1:src/debug/*.c`
+— the tag is present even though HEAD is forked) before this ADR was
+written: `profile on/off` only toggle a flag (`debug/profile.c`,
+`Profile_Command`); the per-address counters are freed and freshly zeroed
+by `Profile_CpuStart` (`debug/profilecpu.c:852`) on every debugger exit via
+`DebugCpu_SetDebugging` (`debug/debugcpu.c:945`, called from
+`debug/debugui.c:1217` on `c`/continue exit and from `DebugUI_ParseLine`
+at `debugui.c:1347` per remote-fifo line), and finalized by
+`Profile_CpuStop` (`debugcpu.c:1079`) on every entry — i.e. each
+continue→break window yields exactly that window's data, and the buffer
+spans all of ST RAM + cartridge + TOS (every executed address, interrupts
+included). The fork's `hrdb`-only prev-cycle carry-over (which preserves
+the first post-resume instruction's attribution across the reset) is
+**absent from stock v2.4.1** (`grep savePrevCycles` = 0 hits there); stock
+simply frees and zeroes, so the shipped binary loses that one
+instruction's cycle count per window — a handful of cycles against a
+160256-cycle frame, immaterial, and not depended on by this design.
+**Decision:** One new tool, `profile_frame {frames, from?, to?}`: N managed
+single-VBL legs (reusing frames.rs's vbl_condition/current_vbl primitives
+and the ADR-15 lifecycle) with one `profile save` per paused frame
+boundary — the reset-on-continue semantics make each dump a clean
+per-frame sample with no reset command needed. Every measurement command
+stays on the frozen ADR-11/15 stdin path inside the `DebugUI()` loop
+(never the remote fifo `DebugUI_ParseLine` path), because that path resets
+the buffer on every parsed line too — the single-session server never
+sends fifo traffic mid-window, so this invariant holds by construction.
+`from`/`to` become a pure address FILTER (an extent, naturally to > from):
+range_* = "your code", total_* = the whole frame, both always reported
+because a vsync-locked program burns ~160256 total cycles/frame by
+construction (total validates the measurement; range is the cost).
+fits_50hz/headroom_pct are defined on the WORST frame (a dropped frame is
+a visible glitch). No static estimate (single-pass straight-line is
+meaningless across a frame), hence no `PROFILE_MAX_RANGE` cap. Per-frame
+dumps go to `work_dir/profile-frame-{seq:04}/frame-{i:04}.txt`; the output
+returns the directory plus the worst frame's path (ADR-5).
+**Alternatives considered:** (a) allow `to < from` in `profile` — patches
+the symptom, still can't express whole-frame or same-PC windows;
+(b) `profile_routine` with rts-depth tracking — a different mechanism
+(stack tracking) whose main use ("routine incl. callees") the extent
+filter already covers; deferred; (c) cumulative deltas between successive
+saves (frame_i = total_i − total_{i−1}) — WRONG against this source: data
+does not survive a continue (`Profile_CpuStart` free+zero), which the live
+test pins by asserting per-frame totals stay ≈160256 rather than climbing
+as i×160256.
+**Consequences:** Frame-cost tuning becomes one call ("0.4 VBL, fits with
+58% headroom"). The tool inherits the managed-lifecycle guarantees (ends
+Paused, or Running on timeout with the breakpoint disarmed). Headroom is
+only meaningful with an extent that excludes the vsync wait-spin — stated
+in the tool description rather than hidden. The reset semantics were
+verified against stock v2.4.1 (the binary actually spawned), not just the
+hrdb-modified checkout the spec first drafted against; the live test's
+±frame-total assertion detects any divergent binary immediately, whichever
+build a future `SHIRAZMCP_HATARI` points at. 50 Hz is assumed
+(`VBL_CYCLES = 160256`); 60 Hz/mono machines measure correctly but
+misstate the budget — future work if ever needed.

@@ -80,14 +80,25 @@ pub fn estimate(insns: &[Insn]) -> CycleEstimate {
 
 /// `cycles / VBL_CYCLES` as a fraction of one 50 Hz frame.
 pub fn vbl_fraction(cycles: u64) -> f64 {
-    cycles as f64 / f64::from(VBL_CYCLES)
+    vbl_fraction_f(cycles as f64)
 }
 
 /// `cycles / SCANLINE_CYCLES` — how many scanlines (HBLs) the code spans.
 /// The natural raster-budget unit for sub-frame effects (`vbl_fraction < 1`);
 /// 313 HBL = one VBL.
 pub fn hbl_count(cycles: u64) -> f64 {
-    cycles as f64 / f64::from(SCANLINE_CYCLES)
+    hbl_count_f(cycles as f64)
+}
+
+/// `cycles / VBL_CYCLES` for an already-fractional cycle count (e.g. an
+/// average over several frames — `vbl_fraction` can't take a fraction).
+pub fn vbl_fraction_f(cycles: f64) -> f64 {
+    cycles / f64::from(VBL_CYCLES)
+}
+
+/// `cycles / SCANLINE_CYCLES` for an already-fractional cycle count.
+pub fn hbl_count_f(cycles: f64) -> f64 {
+    cycles / f64::from(SCANLINE_CYCLES)
 }
 
 /// EA calculation cost (bw, l) by resolved mode — reference §"Time to
@@ -211,5 +222,15 @@ mod tests {
         assert_eq!(vbl_fraction(80_128), 0.5);
         assert_eq!(hbl_count(1024), 2.0); // 1024 cy = 2 scanlines
         assert_eq!(hbl_count(VBL_CYCLES.into()), 313.0); // one frame = 313 HBL
+    }
+
+    #[test]
+    fn fractional_helpers_match_u64_versions_at_integer_points() {
+        assert_eq!(vbl_fraction_f(160_256.0), 1.0);
+        assert_eq!(hbl_count_f(512.0), 1.0);
+        assert_eq!(
+            vbl_fraction_f(80_128.5),
+            vbl_fraction(80_128) + vbl_fraction_f(0.5)
+        );
     }
 }

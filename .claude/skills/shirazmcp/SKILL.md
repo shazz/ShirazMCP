@@ -5,7 +5,7 @@ description: How to drive the ShirazMCP MCP server — run, freeze/debug, profil
 
 # Using the ShirazMCP MCP server
 
-ShirazMCP drives the Hatari Atari ST/STE emulator through **35 MCP tools** — a
+ShirazMCP drives the Hatari Atari ST/STE emulator through **36 MCP tools** — a
 "freezer cartridge for agents" with a full Action-Replay toolkit: boot, **freeze**,
 inspect CPU/video/sound, disassemble, profile, **rip** graphics/music/packed
 data/boot sectors, **hot-patch** 68k live, **persist** the hack, and **watch/search**
@@ -24,11 +24,14 @@ Stopped ──start──▶ Running ⇄ (pause/resume) ⇄ Paused ──stop─
 - `status` = session state. `machine_state` = the emulated ST's CPU+video+screen. `ym_state`
   = the sound chip's live state. Don't confuse them.
 
-## Tool catalog (35)
+## Tool catalog (36)
 **Lifecycle:** `start` · `stop` · `pause` · `resume` · `status`
 **Debug & memory:** `registers` · `read_memory` · `write_memory` · `search_memory` ·
 `screenshot` · `debug` (raw Hatari debugger command — escape hatch)
 **Analyze:** `disasm` (`source=snapshot|live`) · `profile(from,to)` ·
+`profile_frame(frames[,from,to])` — per-frame cost over N VBL frames; from/to filter
+which code counts (range) vs. everything executed (total ≈160256 always for
+vsync-locked code); `fits_50hz`/`headroom_pct` use the worst frame ·
 `breakpoint(action=set|list|remove|clear)` · `state(action=save|load)`
 **Reverse-engineering (Action-Replay):**
 - `watch(addr, on=write)` — **value-change write-watch**; fires when the value at addr
@@ -76,7 +79,9 @@ bootsector · **zx0** · noop-deprotect.
   `ym_state` for the live chip. `spectrogram(3)` to see it.
 - **Debug:** `breakpoint(set, pc=$X)` → `resume` → freezes on hit → `registers`/`disasm(live)`.
   `profile(from,to)` for cycles + `vbl_fraction`/`hbl_count` (raster budget: how many
-  VBLs, or scanlines when sub-frame). `state(save|load)` to snapshot/restore.
+  VBLs, or scanlines when sub-frame). For whole-frame / routine-incl-callees cost, use
+  `profile_frame`, not `profile` — it measures N whole VBL frames instead of a PC range.
+  `state(save|load)` to snapshot/restore.
 - **Reverse-engineer a live value (the RE loop):** to find *who writes* a table/copy, `watch(addr,
   on=write)` → `resume` → the fired PC is the writer. To find a *variable* (score, cursor),
   `cheat_scan(new)` → `run_frames`/`resume` → `cheat_scan(filter, changed|increased)` → narrow →

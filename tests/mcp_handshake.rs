@@ -131,6 +131,7 @@ fn assert_status_tool(resp: &serde_json::Value) {
         "patch",
         "pause",
         "profile",
+        "profile_frame",
         "read_memory",
         "record_audio",
         "registers",
