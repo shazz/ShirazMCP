@@ -23,7 +23,8 @@ is the "save the frozen machine" feature the cartridges were famous for.
 
 - **Freeze & inspect** — `pause` parks the CPU via a debugger break; read registers, memory,
   the video/sound state, and screenshots all from the same frozen instant.
-- **Rip** — graphics (Degas/NeoChrome/MPP), music (SNDH/YM, with a player-fingerprint DB),
+- **Rip** — graphics (Degas/NeoChrome/MPP), music (SNDH/YM, naming the replay driver via a
+  fingerprint DB — ~20 drivers, ~30% of the SNDH archive),
   packed data (Pack-Ice/Atomik/PowerPacker/RNC/**ZX0**, recursively), boot sectors, and
   **STE DMA-PCM samples** → WAV. Picture findings are **structure-scored** (ranked, capped —
   no false-positive floods).

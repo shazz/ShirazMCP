@@ -339,7 +339,7 @@ fn m2_planted_buf() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     (buf, blob, pi1)
 }
 
-fn assert_recursion_finds_picture(buf: Vec<u8>, pi1: &[u8]) {
+fn assert_recursion_finds_picture(buf: Vec<u8>, pi1: &[u8], tag: &str) {
     let mem = Arc::new(MemImage::new(buf, Addr::new(0x10000)));
     let registry = default_registry();
     let findings = registry.scan(mem, Some(RipKind::Picture), 2);
@@ -358,7 +358,7 @@ fn assert_recursion_finds_picture(buf: Vec<u8>, pi1: &[u8]) {
     assert_eq!(rgba8.get_pixel(25, 0).0, [255, 0, 0, 255]);
     assert_eq!(rgba8.get_pixel(319, 199).0, [182, 182, 182, 255]);
 
-    let dir = temp_dir("recursion");
+    let dir = temp_dir(tag);
     let extracted = extract(f, ExtractFormat::Raw, &dir, 1).unwrap();
     assert_eq!(std::fs::read(&extracted.path).unwrap(), pi1);
     let _ = std::fs::remove_dir_all(&dir);
@@ -367,13 +367,13 @@ fn assert_recursion_finds_picture(buf: Vec<u8>, pi1: &[u8]) {
 #[test]
 fn m1_packed_pi1_recursion() {
     let (buf, _blob, pi1) = m1_planted_buf();
-    assert_recursion_finds_picture(buf, &pi1);
+    assert_recursion_finds_picture(buf, &pi1, "recursion-m1");
 }
 
 #[test]
 fn m2_packed_pi1_recursion() {
     let (buf, _blob, pi1) = m2_planted_buf();
-    assert_recursion_finds_picture(buf, &pi1);
+    assert_recursion_finds_picture(buf, &pi1, "recursion-m2");
 }
 
 #[test]

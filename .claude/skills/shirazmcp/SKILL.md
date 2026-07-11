@@ -71,8 +71,9 @@ bootsector · **zx0** · noop-deprotect.
 - **Freeze-then-rip:** `pause` → `rip(kind=picture)` → `extract(id, as=png)`.
 - **Peel packed data:** `rip(kind=picture, depth=2)` (auto), or `depack(addr, scheme=zx0)` for a
   headerless blob at a known offset.
-- **Identify music:** `identify_music` (SNDH header + `$FF8800` fingerprint; degrades to
-  `"unknown"`). `ym_state` for the live chip. `spectrogram(3)` to see it.
+- **Identify music:** `identify_music` (SNDH header + `$FF8800` fingerprint; names the replay
+  driver — ~20 drivers, ~30% of the SNDH archive; degrades to `"unknown"`, never guesses).
+  `ym_state` for the live chip. `spectrogram(3)` to see it.
 - **Debug:** `breakpoint(set, pc=$X)` → `resume` → freezes on hit → `registers`/`disasm(live)`.
   `profile(from,to)` for cycles. `state(save|load)` to snapshot/restore.
 - **Reverse-engineer a live value (the RE loop):** to find *who writes* a table/copy, `watch(addr,
