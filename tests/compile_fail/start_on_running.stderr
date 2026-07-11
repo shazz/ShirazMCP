@@ -1,0 +1,8 @@
+error[E0599]: no method named `start` found for struct `shiraz_mcp::session::Session<shiraz_mcp::session::Running>` in the current scope
+ --> tests/compile_fail/start_on_running.rs:5:15
+  |
+5 |     let _ = s.start();
+  |               ^^^^^ method not found in `shiraz_mcp::session::Session<shiraz_mcp::session::Running>`
+  |
+  = note: the method was found for
+          - `shiraz_mcp::session::Session<shiraz_mcp::session::Stopped>`

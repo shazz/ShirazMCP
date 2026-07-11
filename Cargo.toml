@@ -1,0 +1,61 @@
+[package]
+name = "shiraz-mcp"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.92"
+description = "MCP server driving the Hatari Atari ST emulator, with a plugin ripping engine"
+license = "MIT"
+publish = false
+
+[lib]
+name = "shiraz_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "shiraz-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# MCP server — feature set per docs/plan/rmcp-2.2-notes.md.
+# (server + macros are also defaults; listed explicitly for clarity.)
+rmcp = { version = "2.2.0", features = ["server", "transport-io", "macros"] }
+tokio = { version = "1.47", features = [
+    "macros", "rt-multi-thread", "sync", "process", "io-util", "time", "fs",
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+schemars = "1.0"          # MUST stay on 1.x — rmcp 2.2 re-exports schemars 1.0
+thiserror = "2.0"
+anyhow = "1.0"
+base64 = "0.22"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# `memchr` is used by `search_memory` (P1) and the ripper plugins' magic
+# scans (P3/P4). `image` is used by `ripper/image.rs` (P4) to decode ST
+# planar graphics to PNG. `capstone` (M68K arch) is used by
+# `analyze/disasm.rs` (P2) for fast, offline bulk disassembly over a
+# `MemImage` snapshot.
+memchr = "2.7"
+image = "0.25"
+rayon = "1.10"
+capstone = "0.13"
+
+# P11 audio: `hound` reads the WAVs Hatari records (RIFF PCM16 — §2.4);
+# `rustfft` powers the STFT for the spectrogram tool. Both pure Rust,
+# zero transitive deps of note, pinned by Cargo.lock (ADR-23).
+hound = "3.5"
+rustfft = "6.4"
+
+[dev-dependencies]
+trybuild = "1.0"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[profile.release]
+lto = "thin"

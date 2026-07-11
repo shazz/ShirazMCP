@@ -1,0 +1,19 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock.orig
+
+# External reference clones + notes (re-clone on demand; not redistributed)
+/refs/
+
+# Hatari / scratch runtime artifacts
+/tmp/
+*.png.tmp
+hatari_out.log
+code-index.db
+
+# ad-hoc harness scratch (Python MCP client, ripped WAVs, etc.)
+scratchpad/
+
+# vintage cartridge dump — not redistributed
+assets/URIPPER.PRG

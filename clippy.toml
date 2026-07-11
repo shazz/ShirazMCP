@@ -1,0 +1,5 @@
+# The [lints.clippy] denials above apply to library paths; tests are exempt
+# per PLAN.md conventions.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

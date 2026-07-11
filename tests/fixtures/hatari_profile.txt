@@ -1,0 +1,24 @@
+Hatari CPU profile (Hatari v2.4.1)
+Cycles/second:	8021247
+Field names:	Executed instructions, Used cycles, Instruction cache misses, Data cache hits
+Field regexp:	^([0-9a-f]+) .*% \((.*)\)$
+ST_RAM:		0x000000-0x100000
+ROM_TOS:	0xe00000-0xe40001
+CARTRIDGE:	0xfa0000-0xfc0000
+PROGRAM_TEXT:	0x00aa9a-0x032178
+# disassembly with profile data: <instructions percentage>% (<sum of instructions>, <sum of cycles>, <sum of i-cache misses>, <sum of d-cache hits>)
+0000ce86 303c 0013                move.w #$0013,d0                   0.36% (1, 8, 0, 0)
+0000ce8a 9046                     sub.w d6,d0                        0.36% (1, 4, 0, 0)
+0000ce8c 3600                     move.w d0,d3                       0.36% (1, 4, 0, 0)
+0000ce8e e748                     lsl.w #$03,d0                      0.36% (1, 12, 0, 0)
+0000ce90 41f2 0000                lea.l (a2,d0.W,$00) == $000443be,a0 0.36% (1, 16, 0, 0)
+0000ce9c 3e34 2000                move.w (a4,d2.W,$00) == $0000e848 [0000],d7 0.36% (1, 16, 0, 0)
+0000ceb8 2210                     move.l (a0) [f80807f0],d1          0.36% (1, 12, 0, 0)
+0000d1e2 51ce fca2                dbf.w d6,#$fca2 == $0000ce86 (F)   0.36% (1, 12, 0, 0)
+[...]
+00e007ec 3f00                     move.w d0,-(a7) [d0ba]             3.24% (9, 72, 0, 0)
+00e007f6 6606                     bne.b #$06 == $00e007fe (T)        3.24% (9, 90, 0, 0)
+00e00800 4e73                     rte  == $ae3a0000                  3.24% (9, 180, 0, 0)
+# <callee>: <caller1> = <calls> <types>[ <inclusive/totals>[ <exclusive/totals>]], <caller2> ..., <callee name>
+# types: u = unknown PC change, n = PC moved to next instruction, b = branch/jump, s = subroutine call, r = return from subroutine, e = exception, x = return from exception, 
+# totals: calls/instructions/cycles/i-misses/d-hits

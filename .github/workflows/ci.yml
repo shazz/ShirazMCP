@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    name: fmt · clippy · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to the crate's rust-version (Cargo.toml). Bump both together.
+      - name: Install Rust 1.92
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.92.0"
+          components: rustfmt, clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Unit + integration tests. The emulator-driving suites are `#[ignore]`d
+      # (they need a Hatari binary + X display), so they compile here but do not
+      # run — headless CI stays green without an emulator. See DEVELOPMENT.md.
+      - name: Test
+        run: cargo test --all-features --locked
