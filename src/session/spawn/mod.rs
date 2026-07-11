@@ -12,6 +12,7 @@ use crate::session::fifo::{self, LogTail, HATARI_DEBUG_PREFIX};
 
 mod boot;
 mod control;
+mod recover;
 
 /// How to launch Hatari. Defaults reproduce the DEBUG.md reference
 /// invocation for the MJJ demo (this is a local, single-user tool —
@@ -114,7 +115,8 @@ impl HatariProcess {
         let stdin = kill_on_err(&mut child, stdin_result)?;
 
         kill_on_err(&mut child, wait_for_fifo(&config).await)?;
-        let mut fifo = kill_on_err(&mut child, open_fifo_write(&config).await)?;
+        let fifo_open = open_fifo_write(&config, config.boot_timeout_ms).await;
+        let mut fifo = kill_on_err(&mut child, fifo_open)?;
         let mut log = LogTail::new(config.log_path());
         let boot = confirm_boot(&mut fifo, &mut log, config.boot_timeout_ms).await;
         kill_on_err(&mut child, boot)?;
@@ -136,7 +138,26 @@ impl HatariProcess {
             .await
     }
 
+    /// P27/ADR-43 §4.4: on a fifo-plane EPIPE, one bounded reopen-and-retry
+    /// of the WHOLE operation (safe: sentinel values are per-call unique,
+    /// `fifo/sentinel.rs`, so a half-finished attempt's stale echo can never
+    /// satisfy the retry's fresh value); a dead child short-circuits to
+    /// `Error::ProcessExited` instead (never retried into a corpse). A
+    /// stdin-plane EPIPE has no reopen — classify only.
     pub async fn debug_with_timeout(&mut self, cmd: &str, timeout_ms: u64) -> Result<String> {
+        match self.debug_attempt(cmd, timeout_ms).await {
+            Err(e)
+                if recover::is_broken_pipe(&e) && matches!(self.control, ControlChannel::Fifo) =>
+            {
+                self.recover_fifo_epipe().await?;
+                self.debug_attempt(cmd, timeout_ms).await
+            }
+            Err(e) if recover::is_broken_pipe(&e) => Err(self.classify_stdin_epipe().await),
+            other => other,
+        }
+    }
+
+    async fn debug_attempt(&mut self, cmd: &str, timeout_ms: u64) -> Result<String> {
         let what = format!("sentinel after {cmd}");
         match self.control {
             ControlChannel::Fifo => {
@@ -157,8 +178,18 @@ impl HatariProcess {
     }
 
     /// Raw wrapper-command writer (no sentinel — see §5.6 rationale).
+    /// Always fifo-plane (§5.2 table — callers targeting stdin, e.g.
+    /// `thaw`'s `c`, use `fifo::write_wrapper` directly); P27/ADR-43 §4.4:
+    /// one bounded reopen-and-retry on EPIPE, same shape as
+    /// `debug_with_timeout`'s fifo arm.
     pub async fn write_wrapper(&mut self, line: &str) -> Result<()> {
-        fifo::write_wrapper(&mut self.fifo, line).await
+        match fifo::write_wrapper(&mut self.fifo, line).await {
+            Err(e) if recover::is_broken_pipe(&e) => {
+                self.recover_fifo_epipe().await?;
+                fifo::write_wrapper(&mut self.fifo, line).await
+            }
+            other => other,
+        }
     }
 
     /// Send a raw control command (`hatari-path`/`hatari-option`/

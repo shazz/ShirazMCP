@@ -10,6 +10,7 @@ use super::analyze_wire::{
 };
 use super::insn_out::insns_out;
 use super::mem::scan::parse_addr;
+use super::resolve::resolve_even_addr;
 use super::{to_mcp, wrong_state, HatariServer};
 use crate::analyze::{self, PsgSelect};
 use crate::session::HatariProcess;
@@ -34,13 +35,13 @@ impl HatariServer {
                        Hatari's own debugger (knows effective-address \
                        hints). Hardware operand addresses come back \
                        annotated. Default 32 instructions, max 128 — page \
-                       with next_addr."
+                       with next_addr. addr accepts a symbol name once a \
+                       map is loaded (symbols tool)."
     )]
     pub async fn disasm(
         &self,
         Parameters(a): Parameters<DisasmArgs>,
     ) -> Result<Json<DisasmOutput>, McpError> {
-        let addr = parse_even_addr(&a.addr)?;
         let count = a.count.unwrap_or(DISASM_DEFAULT).min(DISASM_MAX);
         let source = a.source.unwrap_or(DisasmSource::Snapshot);
         let mut guard = self.session.lock().await;
@@ -48,6 +49,7 @@ impl HatariServer {
         let proc = guard
             .process_mut()
             .ok_or_else(|| wrong_state(name, "running or paused"))?;
+        let addr = resolve_even_addr(proc, &a.addr).await?;
         let (insns, next_addr) = match source {
             DisasmSource::Snapshot => snapshot_insns(proc, addr, count).await?,
             DisasmSource::Live => live_insns(proc, addr, count).await?,

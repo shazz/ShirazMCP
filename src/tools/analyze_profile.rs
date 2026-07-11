@@ -7,9 +7,9 @@ use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::{tool, tool_router, ErrorData as McpError};
 
 use super::managed::{self, Fire};
-use super::mem::scan::parse_addr;
 use super::profile_wire::{build_output, PROFILE_LEG_TIMEOUT_MS, PROFILE_MAX_RANGE};
-use super::{to_mcp, AnySession, HatariServer};
+use super::resolve::resolve_addr;
+use super::{to_mcp, wrong_state, AnySession, HatariServer};
 use crate::analyze::{self, cycles};
 use crate::debug;
 use crate::session::{memory, HatariProcess};
@@ -36,15 +36,13 @@ impl HatariServer {
                        vblank ×1; mixed = scanline-weighted). Leaves the \
                        session PAUSED at `to`. vbl_fraction is against the \
                        160256-cycle 50Hz frame. The raw profiler dump is \
-                       saved to profile_path."
+                       saved to profile_path. from/to accept symbol names \
+                       once a map is loaded (symbols tool)."
     )]
     pub async fn profile(
         &self,
         Parameters(a): Parameters<ProfileArgs>,
     ) -> Result<Json<ProfileOutput>, McpError> {
-        let from = parse_addr(&a.from)?;
-        let to = parse_addr(&a.to)?;
-        validate_range(from, to)?;
         let timeout = a.timeout_ms.unwrap_or(PROFILE_LEG_TIMEOUT_MS);
         let region = a.region.unwrap_or(RegionArg::Visible);
         let n = self
@@ -52,10 +50,30 @@ impl HatariServer {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             + 1;
         let mut guard = self.session.lock().await;
+        let (from, to) = resolve_range(&mut guard, &a.from, &a.to).await?;
+        validate_range(from, to)?;
         run_profile(&mut guard, from, to, timeout, region, n)
             .await
             .map(Json)
     }
+}
+
+/// Resolve `from`/`to` AFTER the session lock is held (§8.2): a stopped
+/// session now reports `wrong_state` before arg validation rather than
+/// `invalid_params` for garbage args — an accepted ordering change, since
+/// resolution itself needs a live `DebugChannel`.
+async fn resolve_range(
+    guard: &mut AnySession,
+    from: &str,
+    to: &str,
+) -> Result<(Addr, Addr), McpError> {
+    let name = guard.state_name();
+    let proc = guard
+        .process_mut()
+        .ok_or_else(|| wrong_state(name, "running or paused"))?;
+    let f = resolve_addr(proc, from).await?;
+    let t = resolve_addr(proc, to).await?;
+    Ok((f, t))
 }
 
 fn validate_range(from: Addr, to: Addr) -> Result<(), McpError> {

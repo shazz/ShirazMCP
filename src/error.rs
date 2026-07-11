@@ -43,6 +43,21 @@ pub enum Error {
     /// context in library code; this `#[from]` exists for `?` at boundaries.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// The Hatari child process is gone — detected when a control-plane
+    /// write hit EPIPE and `try_wait` confirmed exit (P27/ADR-43 §1.4: EPIPE
+    /// on either control plane means Hatari exited or is in its exit path).
+    /// `status` is `ExitStatus`'s `Display` (e.g. `signal: 11 (SIGSEGV)`,
+    /// `exit status: 1`) or `"already reaped"` when a prior probe consumed
+    /// it — the one cheap "why" datum available without re-reading the log.
+    /// Never retried (`recover::is_broken_pipe` gates retries out once this
+    /// fires): `start` boots a fresh session; `status`/`stop` reset the FSM
+    /// first if preferred, but the emulator itself must be restarted.
+    #[error(
+        "hatari exited ({status}) — the session is defunct; call start to boot a new session \
+         (status/stop first reset the FSM, but the emulator itself needs restarting)"
+    )]
+    ProcessExited { status: String },
 }
 
 #[cfg(test)]
@@ -115,5 +130,18 @@ mod tests {
         let e: Error = io::Error::new(io::ErrorKind::NotFound, "gone").into();
         assert!(matches!(e, Error::Io(_)));
         assert_eq!(e.to_string(), "I/O error: gone");
+    }
+
+    #[test]
+    fn process_exited_display() {
+        let e = Error::ProcessExited {
+            status: "signal: 11 (SIGSEGV)".to_string(),
+        };
+        assert_eq!(
+            e.to_string(),
+            "hatari exited (signal: 11 (SIGSEGV)) — the session is defunct; call start to boot \
+             a new session (status/stop first reset the FSM, but the emulator itself needs \
+             restarting)"
+        );
     }
 }

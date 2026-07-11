@@ -7,6 +7,7 @@ pub mod basepage;
 pub mod breakpoint;
 pub mod parse;
 pub mod profile;
+pub mod symbols;
 
 use crate::error::Result;
 use crate::session::spawn::HatariProcess;

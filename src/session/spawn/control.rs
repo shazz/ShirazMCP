@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use super::HatariProcess;
+use super::{recover, HatariProcess};
 use crate::error::{Error, Result};
 use crate::session::fifo::{self, HATARI_DEBUG_PREFIX};
 
@@ -39,10 +39,15 @@ impl HatariProcess {
     /// `DebugStdin` before the drain runs and stays there even if the drain
     /// itself errors (a drain `Timeout` is swallowed internally; only a
     /// real I/O error — a dead stdin, i.e. a dead session — propagates).
+    ///
+    /// P27/ADR-43 §4.4: the arm write goes through `self.write_wrapper`
+    /// (fifo plane, retried once on EPIPE); the stdin confirm's EPIPE is
+    /// classified via `classify_stdin_epipe` (no reopen is possible on
+    /// stdin — a dead child is the only explanation, §1.4).
     pub(crate) async fn freeze(&mut self) -> Result<()> {
-        fifo::write_wrapper(&mut self.fifo, ARM_FREEZE).await?;
+        self.write_wrapper(ARM_FREEZE).await?;
         let what = "freeze (debugger entry after b pc > 0 :once)";
-        fifo::debug(
+        let confirm = fifo::debug(
             &mut self.stdin,
             &mut self.log,
             "",
@@ -50,9 +55,20 @@ impl HatariProcess {
             self.config.sentinel_timeout_ms,
             what,
         )
-        .await?;
+        .await;
+        self.map_stdin_epipe(confirm).await?;
         self.control = ControlChannel::DebugStdin;
         self.drain_stdin_entry_text().await
+    }
+
+    /// Map a stdin-plane result's broken-pipe error through
+    /// `classify_stdin_epipe` (P27 §4.4 guard rail: "their stdin writes");
+    /// any other result (Ok or a different error) passes through unchanged.
+    async fn map_stdin_epipe<T>(&mut self, result: Result<T>) -> Result<T> {
+        match result {
+            Err(e) if recover::is_broken_pipe(&e) => Err(self.classify_stdin_epipe().await),
+            other => other,
+        }
     }
 
     /// Drain stray debugger-entry text left queued on the stdin control
@@ -110,6 +126,7 @@ impl HatariProcess {
                 tracing::warn!("stdin drain timed out; proceeding (CPU already parked)");
                 Ok(())
             }
+            Err(e) if recover::is_broken_pipe(&e) => Err(self.classify_stdin_epipe().await),
             Err(e) => Err(e),
         }
     }
@@ -118,9 +135,11 @@ impl HatariProcess {
     /// episode (ADR-11) — flip to `Fifo` immediately (writes after `c` are
     /// illegal, so from here on every command belongs on the fifo even if
     /// the confirm below fails), then a fifo sentinel round-trip confirms
-    /// the main loop is servicing it again.
+    /// the main loop is servicing it again. P27/ADR-43 §4.4: the `c` write's
+    /// EPIPE (a stdin write) is classified via `classify_stdin_epipe`.
     pub(crate) async fn thaw(&mut self) -> Result<()> {
-        fifo::write_wrapper(&mut self.stdin, THAW_CMD).await?;
+        let write_result = fifo::write_wrapper(&mut self.stdin, THAW_CMD).await;
+        self.map_stdin_epipe(write_result).await?;
         self.control = ControlChannel::Fifo;
         let what = "resume (fifo liveness after c)";
         fifo::debug(
@@ -144,7 +163,10 @@ impl HatariProcess {
     /// breakpoint's own output is preserved; only the drain's is
     /// discarded). On `Err(Timeout)` (or any I/O error after `c` was
     /// written) the machine is running, so `control` flips to `Fifo` before
-    /// returning.
+    /// returning. P27/ADR-43 §4.4: the queued sentinel probe is a stdin
+    /// write — its EPIPE is classified via `classify_stdin_epipe` (the
+    /// "known state first" guard rail: `control` flips to `Fifo` before the
+    /// classification's own grace-period sleep runs).
     pub(crate) async fn continue_until_break(&mut self, timeout_ms: u64) -> Result<String> {
         if !matches!(self.control, ControlChannel::DebugStdin) {
             return Err(Error::Session(
@@ -159,7 +181,11 @@ impl HatariProcess {
             }
             Err(e) => {
                 self.control = ControlChannel::Fifo;
-                Err(e)
+                Err(if recover::is_broken_pipe(&e) {
+                    self.classify_stdin_epipe().await
+                } else {
+                    e
+                })
             }
         }
     }

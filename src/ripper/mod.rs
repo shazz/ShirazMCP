@@ -10,6 +10,7 @@ pub mod finding;
 pub mod image;
 pub mod plugins;
 pub mod prg_file;
+pub mod prg_symbols;
 pub mod registry;
 pub mod repatch;
 pub mod snapshot;

@@ -17,6 +17,8 @@ pub mod debugger;
 pub mod depack;
 pub mod extract;
 pub mod frames;
+pub mod input;
+pub(crate) mod input_wire;
 pub mod profile_frame;
 pub(crate) mod profile_frame_wire;
 pub(crate) mod profile_wire;
@@ -32,6 +34,7 @@ pub(crate) mod managed;
 pub mod mem;
 pub mod music;
 pub(crate) mod repatch_wire;
+pub(crate) mod resolve;
 pub mod rip;
 pub mod rip_sample;
 pub(crate) mod rip_sample_wire;
@@ -41,6 +44,9 @@ pub(crate) mod save_prg_wire;
 mod snapshot_capture;
 mod snapshot_prg;
 pub(crate) mod snapshot_wire;
+pub mod symbols;
+pub(crate) mod symbols_load;
+pub(crate) mod symbols_wire;
 pub mod view;
 // Pure helpers split out of view.rs for the 200-line budget (§7.5 fallback,
 // same pattern as rip.rs/rip_wire.rs) — not part of the public tool surface.
@@ -83,6 +89,10 @@ pub struct HatariServer {
     /// std Mutex, like `last_scan`; bounded ≤ 4 MiB + 512 KiB, one at a time.
     cheat: Arc<StdMutex<Option<CheatStore>>>,
     cheat_seq: Arc<AtomicU64>,
+    /// P26: the last successful `symbols(action="load")`'s listing mirror —
+    /// std Mutex, like `cheat`/`last_scan`; cleared on `action="free"` and
+    /// on session `stop`.
+    symbols: Arc<StdMutex<Option<symbols_wire::SymbolStore>>>,
     extract_seq: Arc<AtomicU64>,
     // Per-tool output-file sequence counters (view_memory_as_screen P4,
     // profile/state P2, machine_state P10, audio artifacts P11).
@@ -103,6 +113,7 @@ impl HatariServer {
             scan_seq: Arc::new(AtomicU64::new(0)),
             cheat: Arc::new(StdMutex::new(None)),
             cheat_seq: Arc::new(AtomicU64::new(0)),
+            symbols: Arc::new(StdMutex::new(None)),
             extract_seq: Arc::new(AtomicU64::new(0)),
             view_seq: Arc::new(AtomicU64::new(0)),
             profile_seq: Arc::new(AtomicU64::new(0)),
@@ -137,10 +148,12 @@ impl HatariServer {
             + Self::save_prg_router()
             + Self::watch_router()
             + Self::frames_router()
+            + Self::input_router()
             + Self::xrefs_router()
             + Self::cheat_router()
             + Self::ym_router()
             + Self::rip_sample_router()
+            + Self::symbols_router()
     }
 }
 
@@ -168,6 +181,8 @@ impl ServerHandler for HatariServer {
                  player name, confidence, replay address), bootsector \
                  (analyze a floppy boot sector — $1234 checksum, DOS BPB, \
                  loader/virus heuristics — from RAM or a .ST image). \
+                 Symbols: symbols (register a label map — then profile/disasm/breakpoint take \
+                 names like BlitSphere). \
                  Analyze: disasm (Capstone 68k over a snapshot, or Hatari \
                  live), profile (measured + blind/contended static cycles \
                  between two PCs, as raw cycles AND vbl_fraction / hbl_count \
@@ -202,6 +217,8 @@ impl ServerHandler for HatariServer {
                  the PC that changed it), xrefs (static cross-references \
                  to an address over a snapshot), run_frames (run exactly \
                  N VBL frames then freeze). \
+                 Input: send_key (inject IKBD key/mouse events, optionally \
+                 run N frames after, for headless interactive capture). \
                  Cheat: cheat_scan (iterative memory-change search — snapshot, run, filter \
                  changed/increased/eq…, list survivors: find any variable with no disassembly).",
             )
@@ -218,7 +235,8 @@ pub(crate) fn to_mcp(e: Error) -> McpError {
         | Error::Io(_)
         | Error::Session(_)
         | Error::Ripper { .. }
-        | Error::Assembler { .. } => McpError::internal_error(e.to_string(), None),
+        | Error::Assembler { .. }
+        | Error::ProcessExited { .. } => McpError::internal_error(e.to_string(), None),
     }
 }
 

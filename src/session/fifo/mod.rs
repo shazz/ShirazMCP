@@ -4,6 +4,7 @@
 //! cleanup, no behavior change beyond §2.5's stray-sentinel filter.
 
 pub mod log_tail;
+mod noise;
 mod sentinel;
 
 use std::time::Duration;
@@ -50,19 +51,27 @@ pub async fn debug<W: AsyncWrite + Unpin + Send>(
     Ok(strip_protocol_lines(lines))
 }
 
-/// Drop wrapper-command echoes (`"> ..."`), blank lines, and — §2.5 — any
-/// line that itself looks like ANY sentinel's result: a queued/replayed
-/// sentinel (a retry, or a fifo write that queued while frozen and replayed
-/// on resume) must never be mistaken for a later command's real output —
+/// Drop wrapper-command echoes (`"> ..."`), blank lines, any line that
+/// itself looks like ANY sentinel's result (§2.5 — a queued/replayed
+/// sentinel, a retry, or a fifo write that queued while frozen and replayed
+/// on resume, must never be mistaken for a later command's real output;
 /// `parse_evaluate` takes the first `"= %"` line, so an unfiltered stray
-/// sentinel echo could be returned as if it were a real value. Matches the
-/// whole sentinel FAMILY (any call's value), not just the current one —
-/// output-stripping must catch stale echoes from earlier calls too.
+/// sentinel echo could be returned as if it were a real value; matches the
+/// whole sentinel FAMILY, not just the current call's value, so stale
+/// echoes from earlier calls are caught too), and — P27/ADR-43 — Hatari's
+/// own idle-path log noise (`noise::is_hatari_noise`: the EAGAIN
+/// `"command FIFO read error"` line `Control_CheckUpdates` perrors on every
+/// poll of an idle fifo). The noise clause runs before ADR-28's
+/// `cap_output_tail`, so noise can never evict real output from a capped
+/// tail window.
 fn strip_protocol_lines(lines: Vec<String>) -> String {
     lines
         .into_iter()
         .filter(|l| {
-            !l.starts_with("> ") && !l.trim().is_empty() && !sentinel::is_sentinel_family_line(l)
+            !l.starts_with("> ")
+                && !l.trim().is_empty()
+                && !sentinel::is_sentinel_family_line(l)
+                && !noise::is_hatari_noise(l)
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -201,5 +210,36 @@ mod tests {
             strip_protocol_lines(lines),
             "hello\n= %220 (dec), $dc (hex)"
         );
+    }
+
+    /// P27 §2.4: a mixed batch of one real line and Hatari's idle-path EAGAIN
+    /// noise must leave only the real line — every `debug()`/
+    /// `continue_and_wait()` caller inherits this from the one clause above.
+    #[test]
+    fn strip_protocol_lines_drops_hatari_noise() {
+        let lines = vec![
+            "command FIFO read error: Resource temporarily unavailable".to_string(),
+            "Wrote 0x100000 bytes.".to_string(),
+            "command FIFO read error: Resource temporarily unavailable".to_string(),
+        ];
+        assert_eq!(strip_protocol_lines(lines), "Wrote 0x100000 bytes.");
+    }
+
+    /// MCP_TODOS §6 regression pin: the noise line's own text contains
+    /// "error" case-insensitively, so before this filter existed it could
+    /// reach `debug::write_memwrite_line`'s case-insensitive `"ERROR"` scan
+    /// and be mistaken for a real Hatari write rejection — `write_memory`
+    /// failing on a Running session with
+    /// `parse error (memwrite): unexpected input "command FIFO read error…"`.
+    /// A memwrite response consisting purely of noise (the EAGAIN line polls
+    /// straight through Running-state command output) must now strip to
+    /// nothing, so the caller's error scan never sees it.
+    #[test]
+    fn strip_protocol_lines_drops_noise_before_memwrite_error_scan() {
+        let lines = vec![
+            "command FIFO read error: Resource temporarily unavailable".to_string(),
+            "command FIFO read error: Resource temporarily unavailable".to_string(),
+        ];
+        assert_eq!(strip_protocol_lines(lines), "");
     }
 }

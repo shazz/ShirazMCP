@@ -55,11 +55,13 @@ ShirazMCP/
 │   │   ├── fifo/
 │   │   │   ├── mod.rs       # sentinel-synced debug<W>/write_wrapper/continue_and_wait (ADR-11/-15: W = fifo or stdin)
 │   │   │   ├── log_tail.rs  # LogTail — polling tail of the Hatari log
+│   │   │   ├── noise.rs     # Hatari idle-path log noise predicate, filtered in strip_protocol_lines (P27, ADR-43)
 │   │   │   └── sentinel.rs  # per-call-unique sentinel values (ADR-21)
 │   │   ├── spawn/
 │   │   │   ├── mod.rs       # HatariProcess: config, spawn, debug_with_timeout, wait_for_log, control_and_wait (P11)
 │   │   │   ├── boot.rs      # spawn steps 1-5 (process, fifo wait, boot-gate, --alert-level fatal)
-│   │   │   └── control.rs   # ADR-11 freeze()/thaw() + ADR-15 continue_until_break() + shutdown (P11 line-budget move)
+│   │   │   ├── control.rs   # ADR-11 freeze()/thaw() + ADR-15 continue_until_break() + shutdown (P11 line-budget move)
+│   │   │   └── recover.rs   # EPIPE classification + bounded fifo reopen-retry — EPIPE means Hatari exited (P27, ADR-43)
 │   │   ├── memory.rs        # acquire whole-RAM image for ripping
 │   │   └── record.rs        # P11: soundout/recsound/fast-forward driver over the control fifo (ADR-23)
 │   ├── audio/                # pure DSP, no session/tools/debug/ripper imports (P11, ADR-23)
@@ -73,11 +75,12 @@ ShirazMCP/
 │   │   ├── basepage.rs      # GEMDOS basepage discovery — the live load address (P16)
 │   │   ├── breakpoint.rs    # typed `b` (conditional CPU breakpoint) wrappers (P2)
 │   │   ├── profile.rs       # Hatari CPU profiler driver + save-file parser (P2)
+│   │   ├── symbols.rs       # typed `symbols` (prg/file/free) load wrappers (P26)
 │   │   └── parse/
 │   │       ├── mod.rs       # parse_err, fixture_block, re-exports
 │   │       ├── cpureg.rs    # cpureg parsing
 │   │       ├── values.rs    # evaluate/m (numeric extraction)
-│   │       ├── status.rs    # symbols/screenshot (outcome lines)
+│   │       ├── status.rs    # symbols/screenshot (outcome lines) + parse_loaded_path (P26)
 │   │       ├── info_ym.rs   # info ym (PSG register dump) parsing (P17)
 │   │       └── info_mfp.rs  # info mfp (MFP 68901 internal-struct dump) parsing (P22)
 │   ├── analyze/
@@ -108,6 +111,7 @@ ShirazMCP/
 │   │   │   └── score.rs     # picture structure scorer: gate/rank picture findings (P21)
 │   │   ├── disk.rs          # raw .ST sector-0 reader, path-validated (P7)
 │   │   ├── prg_file.rs      # GEMDOS .PRG container parse: header/segments/reloc table, path-validated read (P16)
+│   │   ├── prg_symbols.rs   # DRI/GST symbol-table parse + relocation, pure over PrgFile (P26)
 │   │   ├── repatch.rs       # RAM→file back-mapping: expected image, diff→plan, apply (P16)
 │   │   ├── snapshot/        # freeze-the-machine .PRG builder (P22, ADR-38/-39)
 │   │   │   ├── mod.rs       # CpuRegs/HwRegs/SnapshotFacts + build_snapshot_prg orchestration
@@ -189,6 +193,8 @@ ShirazMCP/
 │       ├── watch.rs         # watch: managed value-change breakpoint + writer backscan (P14, ADR-27)
 │       ├── watch_wire.rs    # wire schema + condition/value-format helpers (P14)
 │       ├── frames.rs        # run_frames: exact VBL frame stepping (tool + wire in one file, P14)
+│       ├── input.rs         # send_key: IKBD key/mouse injection over the control fifo, optional frames composition (P27, ADR-44)
+│       ├── input_wire.rs    # wire schema + pure key/scancode/alias parsing + wire-line building (P27, ADR-44)
 │       ├── xrefs.rs         # xrefs: static cross-reference scan tool (P14)
 │       ├── xrefs_wire.rs    # wire schema + mode/access string mapping (P14)
 │       ├── cheat.rs         # cheat_scan: iterative memory-change search (P15)
@@ -198,7 +204,10 @@ ShirazMCP/
 │       ├── ym_wire.rs       # wire schema + build (P17)
 │       ├── ym_pretty.rs     # text pretty-printer, split from ym_wire.rs for the line ceiling (P17)
 │       ├── rip_sample.rs    # rip_sample: STE DMA-PCM sample ripper (P20, ADR-20 momentary freeze)
-│       └── rip_sample_wire.rs # wire schema + plan/build helpers (P20)
+│       ├── rip_sample_wire.rs # wire schema + plan/build helpers (P20)
+│       ├── resolve.rs       # resolve_addr/resolve_even_addr: the one symbol-name-or-number seam (P26, ADR-45)
+│       ├── symbols.rs       # symbols tool: load/list/free choreography + basepage auto-detect (P26, ADR-45)
+│       └── symbols_wire.rs  # wire schema + SymbolStore + nm-ASCII parser + list filter/sort (P26, ADR-45)
 └── tests/
     ├── integration.rs       # drives Hatari + ../MJJ demo end-to-end
     ├── bootsector.rs        # boot-sector checksum/BPB/heuristics fixtures (P7)
@@ -209,7 +218,8 @@ ShirazMCP/
     ├── assemble.rs          # P8: vasm-gated goldens + live patch round-trip (ignored)
     ├── audio_live.rs        # P11: record_audio/spectrogram against a live MJJ session (ignored)
     ├── rip_sample_live.rs   # P20: rip_sample against a staged DHS Uhane session (ignored)
-    └── snapshot_prg_live.rs # P22: save_prg mode=snapshot freeze→emit→reboot→verify (ignored)
+    ├── snapshot_prg_live.rs # P22: save_prg mode=snapshot freeze→emit→reboot→verify (ignored)
+    └── symbols_live.rs      # P26: symbols load/list/free + label-name disasm/breakpoint (ignored)
 ```
 
 ## Layer Responsibilities
@@ -273,14 +283,34 @@ fifo — pinned wire strings, fast-forward suspend/restore, real-time record
 window; synchronization is per-command log echoes, not the debugger
 sentinel (ADR-23).
 
+P27 (ADR-43) closes two control-plane robustness gaps. `fifo/noise.rs`
+filters Hatari's own idle-path log spam (`perror("command FIFO read
+error")` on every non-blocking poll of an idle fifo) inside
+`strip_protocol_lines`, the existing single output-hygiene chokepoint —
+every `debug()`/`continue_and_wait()` caller inherits the fix, including
+`debug::write_bytes`'s `memwrite` error scan, which the noise line's own
+"error" substring used to false-trigger on a Running session. `spawn/
+recover.rs` classifies control-plane `EPIPE`: on the fifo plane, a `try_wait`
+liveness probe either yields `Error::ProcessExited` (never retried into a
+corpse) or a bounded one-shot reopen-and-retry of the whole operation
+(sentinels are per-call unique, so a half-finished attempt's stale echo
+cannot satisfy the retry); the stdin plane has no reopen and classifies
+only. `status` (`tools/lifecycle.rs`) is the one place that probes
+proactively — see State Machines below.
+
 ### `debug/` — typed debugger operations
 **Does:** wrap `evaluate`, `disasm`, `cpureg`, `m` (memdump), symbols; `breakpoint.rs`
 wraps `b` (arm/list/remove/clear conditional CPU breakpoints, P2); `profile.rs`
 drives Hatari's CPU profiler (`profile on/save/off`) and parses its per-address save
 file. All parse Hatari's textual log output into typed values. Encapsulates ST
 quirks: `$` hex, `m` refuses indirect (do `evaluate (ptr)` → literal `m`), per-run
-load addresses. **Must NOT:** touch the process/fifo directly (goes through
-`session`).
+load addresses. `symbols.rs` (P26, ADR-45) wraps `symbols prg` / `symbols <file>
+[$t $d $b]` / `symbols <file>` / `symbols free` — but NEVER the pager-hazard listing
+form `symbols name|code|data` (v2.4.1's `Symbols_Show` pages via `fgets(stdin)`,
+which would deadlock the Running main loop or corrupt the Paused stdin control
+plane); a repo-wide grep-gate (`tests/symbols_live.rs`'s
+`symbols_listing_pager_grep_gate`) enforces this. **Must NOT:** touch the
+process/fifo directly (goes through `session`).
 
 ### `analyze/` — disassembly, profiling, annotation
 **Does:** disassemble a `MemImage` region with embedded Capstone (`disasm.rs`, fast,
@@ -473,7 +503,27 @@ the frame-windowed sibling of `profile` — the measurement window is N
 single-VBL managed legs (`frames.rs` primitives) and the PC range is
 demoted to a pure address filter; one `profile save` per paused boundary
 exploits Hatari's reset-on-continue profiler semantics (ADR-42).
-Choreography-not-capability, like its siblings.
+Choreography-not-capability, like its siblings. P27 adds `send_key`
+(`input.rs`/`input_wire.rs`, ADR-44): IKBD key/mouse injection over the
+control fifo, always sent client-validated (`Control_ProcessBuffer` aborts
+its whole read batch at the first invalid command, so nothing is written
+unless every entry parses first) — Running sessions get one confirm
+round-trip, Paused sessions queue the events for the next resume/
+run_frames, and an optional `frames: N` composes with the ADR-15 managed
+run-to-breakpoint lifecycle into the atomic headless-capture primitive
+(freeze → inject → run N VBL frames → freeze → screenshot). P26 adds
+`symbols` (load/list/free, ADR-45): the ONLY new resolution seam is
+`tools/resolve.rs`'s `resolve_addr`/`resolve_even_addr` — `Addr::parse`
+first (numbers always win, unchanged), then, only on parse failure and only
+for a plausible identifier, `evaluate <name>` against the live session
+(Hatari itself is the sole name→address authority, never the server-side
+store). Exactly three tools call it — `disasm`, `profile`, and (needing no
+plumbing at all, since Hatari's `b` conditions already resolve symbols at
+arm time) `breakpoint`'s arm-failure hint; the other ~12 address-taking
+tools are untouched. Listing (`action=list`) is served entirely from a
+Rust-side mirror (`symbols_wire::SymbolStore`) rebuilt from the same file
+Hatari read, because Hatari's own `symbols name|code|data` is unusable over
+either control plane (see the `debug/` section above).
 
 ## Data Flow
 
@@ -547,8 +597,16 @@ it.
 - **RipPlugin / Depacker** — the extension contract (above).
 - **Finding** — a located artifact (offset + len + kind + label); lightweight
   identifier the agent later `extract`s just-in-time.
-- **Symbols** — DRI/GST symbols from the PRG (`symbols prg`); TEXT symbols resolve
-  by name, BSS pointer *values* change per run (dereference live via `evaluate`).
+- **Symbols** — DRI/GST or nm-ASCII symbols registered via the `symbols` tool
+  (P26, ADR-45): `action=load` with no `path` = `symbols prg` (the running
+  GEMDOS-HD program's own table, Hatari self-relocates); `path` to a `.PRG`
+  is the same but for an arbitrary file; `path` to an nm-style ASCII map gets
+  TEXT/DATA/BSS offsets auto-detected from the GEMDOS basepage
+  (`debug::basepage`) or given explicitly. TEXT symbols resolve by name via
+  `resolve_addr`/`evaluate`; BSS pointer *values* still change per run
+  (dereference live). `action=list` browses a server-side mirror
+  (`symbols_wire::SymbolStore`) — never Hatari's own listing command, which
+  pages via `fgets(stdin)` and would deadlock/corrupt the control plane.
 - **Replay anchor** — disasm-confirmed `$FFFF8800`/`$FFFF8802` reference cluster;
   the relocation-invariant location of a music driver (P6, ADR-16).
 - **Player signature** — const masked-word fingerprint naming a replay driver;
@@ -612,3 +670,14 @@ Stopped ──start──▶ Booting ──(fifo ready + boot wait)──▶ Run
   outcome is a compile-time-known session state, closing the "breakpoint fires
   behind the FSM's back" hole ADR-11 left open. `tools/breakpoint.rs`
   (action=set) and `tools/analyze_profile.rs` (`profile`) are its only callers.
+- **Probe-driven reset to Stopped (P27, ADR-43):** `status` is the FSM's only
+  probe-driven transition — every other transition is caused by an agent
+  action. `Running ──status (child exited)──▶ Stopped` and
+  `Paused ──status (child exited)──▶ Stopped`: a `try_wait` liveness check
+  finds the child already dead (confirmed live: an unreaped `<defunct>`
+  zombie under a session the FSM still called `paused`) and resets to a
+  fresh `Stopped`, carrying the exit status in `note` so the FSM never lies
+  about a dead emulator. No other tool auto-transitions on
+  `Error::ProcessExited` — the error message itself directs the agent to
+  `status`/`stop`, both of which recover; smearing guard-transition logic
+  across every tool was rejected (see ADR-43).

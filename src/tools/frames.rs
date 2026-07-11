@@ -90,7 +90,9 @@ impl HatariServer {
     }
 }
 
-fn validate_frames(frames: u32) -> Result<(), McpError> {
+// `pub(crate)`: reused by `send_key`'s `frames:` composition (P27 §3.5) —
+// same 1..=FRAMES_MAX shape, no duplicated bound.
+pub(crate) fn validate_frames(frames: u32) -> Result<(), McpError> {
     if (1..=FRAMES_MAX).contains(&frames) {
         Ok(())
     } else {

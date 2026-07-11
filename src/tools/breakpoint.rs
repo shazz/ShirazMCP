@@ -11,6 +11,7 @@ use super::breakpoint_wire::{bare_output, cap_output, load_snapshot, save_snapsh
 use super::managed::{self, Fire};
 use super::{to_mcp, wrong_state, HatariServer};
 use crate::debug::breakpoint as bp;
+use crate::error::Error;
 use crate::types::Addr;
 
 /// Re-exported for `tests/analyze_live.rs` (see tools/analyze.rs's note).
@@ -34,7 +35,9 @@ impl HatariServer {
                        (clear also cleans up breakpoints armed via the \
                        raw debug tool). Never arm breakpoints via \
                        debug(cmd) — a fire outside this tool freezes the \
-                       machine invisibly (recover with pause)."
+                       machine invisibly (recover with pause). Conditions \
+                       accept symbol names once a map is loaded: pc = \
+                       BlitSphere (symbols tool)."
     )]
     pub async fn breakpoint(
         &self,
@@ -71,6 +74,26 @@ impl HatariServer {
     }
 }
 
+/// P26 §8.3: arming fails with `Error::Parse` whose line contains Hatari's
+/// `breakcond.c` "invalid variable/register/symbol name" text when the
+/// condition names an unresolved symbol — point at the symbols tool
+/// instead of a generic internal error. Everything else passes through
+/// `to_mcp` unchanged (session errors, the timeout/disarm race, …).
+fn arm_hint(e: Error) -> McpError {
+    if let Error::Parse { input, .. } = &e {
+        if input.contains("invalid variable/register/symbol name") {
+            return McpError::invalid_params(
+                format!(
+                    "{input} — if this is a label, load the symbol map first: \
+                     symbols(action=\"load\")"
+                ),
+                None,
+            );
+        }
+    }
+    to_mcp(e)
+}
+
 fn set_output(fire: Fire) -> BreakpointOutput {
     let (fired, pc, output) = match fire {
         Fire::Fired {
@@ -103,7 +126,7 @@ impl HatariServer {
         let mut guard = self.session.lock().await;
         let fire = managed::run_to_breakpoint(&mut guard, &condition, timeout_ms)
             .await
-            .map_err(to_mcp)?;
+            .map_err(arm_hint)?;
         Ok(set_output(fire))
     }
 
@@ -178,5 +201,38 @@ impl HatariServer {
             .process_mut()
             .ok_or_else(|| wrong_state(name, "running"))?;
         load_snapshot(proc, &raw).await
+    }
+}
+
+#[cfg(test)]
+mod arm_hint_tests {
+    use super::*;
+
+    #[test]
+    fn unresolved_symbol_gets_the_load_hint() {
+        let e = Error::Parse {
+            context: "breakpoint add".to_string(),
+            input: "ERROR: invalid variable/register/symbol name 'BlitSphere'".to_string(),
+        };
+        let mcp = arm_hint(e);
+        assert!(mcp.message.contains("symbols(action=\"load\")"));
+        assert!(mcp.message.contains("BlitSphere"));
+    }
+
+    #[test]
+    fn other_parse_errors_pass_through_unchanged() {
+        let e = Error::Parse {
+            context: "breakpoint add".to_string(),
+            input: "ERROR: syntax error".to_string(),
+        };
+        let mcp = arm_hint(e);
+        assert!(!mcp.message.contains("symbols(action"));
+    }
+
+    #[test]
+    fn non_parse_errors_pass_through() {
+        let e = Error::Session("no live session".to_string());
+        let mcp = arm_hint(e);
+        assert!(mcp.message.contains("no live session"));
     }
 }

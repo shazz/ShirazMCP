@@ -2022,3 +2022,209 @@ hrdb-modified checkout the spec first drafted against; the live test's
 build a future `SHIRAZMCP_HATARI` points at. 50 Hz is assumed
 (`VBL_CYCLES = 160256`); 60 Hz/mono machines measure correctly but
 misstate the budget — future work if ever needed.
+
+## 2026-07-11 — ADR-43: Control-plane robustness — Hatari noise filtered centrally; EPIPE classified as process death
+
+**Status:** accepted
+**Context:** (1) Hatari's main loop `perror()`s "command FIFO read error:
+<errno>" on every idle poll of its non-blocking control fifo
+(`Control_CheckUpdates`, v2.4.1 `control.c:398-411`, polled from
+`Main_EventHandler` at `main.c:521`); with stderr redirected to our log,
+every long-running tool call returned dozens of noise lines. This turned out
+to be more than cosmetic: the noise line's own text contains "error"
+case-insensitively, so it could reach `debug::write_memwrite_line`'s
+case-insensitive `"ERROR"` scan and be mistaken for a real Hatari write
+rejection — the field-reported `write_memory` failure on a Running session
+(STEIsNotDead `MCP_TODOS.md` §6: `parse error (memwrite): unexpected input
+"command FIFO read error…"`), confirmed by tracing both paths through the
+same `debug()` → `strip_protocol_lines` chokepoint and pinned with a
+dedicated regression test. (2) A field report showed `fifo I/O … Broken
+pipe` while `status` claimed `paused`, and recurred "several times in one
+session" (`MCP_TODOS.md` §3/§7). Source analysis pins EPIPE on either
+control plane to an exited/exiting Hatari: `Control_RemoveFifo`'s only
+runtime callers are `Control_SetFifo`'s own re-open (never triggered at
+runtime by this server), a startup option-parse failure (`main.c:929-932`),
+and `main.c:971` — the line immediately after `M68000_Start()` returns, the
+normal emulator exit path. Live-verified: an unreaped `<defunct>` Hatari
+zombie sat behind a session the FSM still reported `paused`.
+**Decision:** (1) A single documented noise predicate
+(`fifo/noise.rs::is_hatari_noise`, prefix-match only — `perror` suffixes are
+locale text) applied in `strip_protocol_lines`, the existing central
+output-hygiene point, so every tool inherits the fix and noise is stripped
+before ADR-28's tail cap AND before any caller's own error-line scan
+(closing `MCP_TODOS.md` §6 as a side effect). (2) A `ProcessExited` error
+variant; on control-plane EPIPE, `HatariProcess` probes `try_wait`: dead ⇒
+`ProcessExited` (never retried), alive+fifo-plane ⇒ reopen the write end
+once (1 s bound) and retry the whole operation exactly once (safe: sentinels
+are per-call unique, so a half-finished attempt's stale echo can never
+satisfy the retry's fresh value), alive+stdin-plane ⇒ classify only after a
+brief grace + re-probe (no reopen is possible on stdin — the kernel only
+closes a child's stdin read end at process exit). The error message
+explicitly names `start` as the required recovery, not a retry: repeated
+field reports show Hatari is genuinely dying under real workloads, not
+merely dropping a pipe, so the message must not suggest anything less than a
+fresh boot. (3) `status` probes liveness and reaps: a dead child under a
+live-state FSM is reset to `Stopped` with an explanatory `note` carrying the
+exit status (`ExitStatus`'s `Display`, e.g. `signal: 11 (SIGSEGV)`) — the
+one cheap "why" datum available without redesigning the error shape to also
+carry a captured log tail.
+**Alternatives considered:** Filtering in `LogTail` ingestion (rejected:
+couples semantics-free tailing to Hatari line meanings and silently affects
+needle-matching callers — today no needle collides with a noise line, but
+the coupling would have to be re-proven for every future needle). Patching
+Hatari (rejected: we drive the user's binary). Retrying EPIPE blindly at the
+write site (rejected: `write_line` has no `Child` access, mid-protocol
+retries corrupt sentinel round-trips, and EPIPE is almost never transient).
+Auto-transitioning the FSM to `Stopped` from every tool on `ProcessExited`
+(rejected: smears guard-transition logic across the tool layer; the error
+message directs to `status`/`stop`, both of which recover). Attaching a
+captured log tail to `ProcessExited` for a richer "why" (considered per a
+field request — deferred: the pinned error shape carries `status` only; a
+log tail needs its own sizing/formatting/API-surface design this phase did
+not scope).
+**Consequences:** `run_frames`/`watch` output is clean; `write_memory` on a
+Running session no longer false-fails on Hatari's own noise; a crashed
+Hatari is detected at the next control-plane write and `status` self-heals
+to `stopped` with the exit status preserved for diagnosis; the noise list is
+one grep away from extension; the paused-plane EPIPE remains
+non-recoverable by design (stdin cannot be reopened) — only honest. Why
+Hatari keeps dying under the reporting workload is still unknown; this fix
+makes the death visible and diagnosable (exit status in `note`) rather than
+closing the root cause — a follow-up investigation, not a P27 deliverable.
+**Implementation note:** every Hatari file:line citation in this ADR and its
+code comments was verified against the real, stock `v2.4.1` tag (`cd
+/home/matt/projects/hatari && git show v2.4.1:src/<file>.c` — that checkout
+is the tattlemuss/hrdb fork, but its `v2.4.1` tag is the genuine upstream
+release commit, confirmed via `git log -1 v2.4.1`). `docs/plan/P27.md`'s own
+citations were drawn from a different working tree and were consistently
+off by tens to hundreds of lines (the semantics they described were
+correct; the exact line numbers were not) — corrected throughout rather than
+left as a trap for the next reader.
+
+## 2026-07-11 — ADR-44: send_key — IKBD injection over the existing control fifo, composed with the managed frame-runner; KEYS_MAX derived from Hatari's real fifo read window
+
+**Status:** accepted
+**Context:** Headless capture of interactive modes required rebuilding
+programs with a `-D` default flag because nothing could press a key
+(STEIsNotDead `MCP_TODOS.md` §4). Hatari's control fifo already accepts
+`hatari-event keypress/keydown/keyup <char|scancode>` plus
+`doubleclick`/`rightdown`/`rightup` (v2.4.1 `control.c:66-161`); but
+`hatari-event` is serviced by `Control_CheckUpdates` in the MAIN loop
+(`main.c:521`) — a Hatari frozen in DebugUI (ADR-11) queues fifo writes
+until resume, and `Control_ProcessBuffer` aborts a whole read batch at the
+first invalid command (`control.c:371`).
+**Decision:** One `send_key` tool (`keys`: 1..=14 entries — chars, scancodes
+0..=255 emitted canonically as decimal, named aliases pinned from
+`keymap.c`'s `Keymap_PcToStScanCode`, plus the three mouse events; `action`
+press/down/up). Validation is 100% client-side (batch-abort fact). Events
+always go to the fifo: Running ⇒ serviced within one main-loop iteration,
+confirmed by one sentinel round-trip whose output is scanned for Hatari
+`ERROR:` lines; Paused ⇒ queued (reported `queued: true`). An optional
+`frames: N` arg composes with the ADR-15/27 machinery (`ensure_paused` →
+queue events → `run_to_breakpoint` on VBL+N) into the atomic headless-
+capture primitive: freeze → inject → run exactly N frames → freeze →
+screenshot.
+
+**Deviation from the phase spec:** `docs/plan/P27.md` §3.2 pinned
+`KEYS_MAX = 32`, justified by "Hatari's 4096-byte read buffer
+(`control.c:428`)". Verified against the real v2.4.1 tag (the binary this
+server actually spawns — see ADR-43's `Implementation note`), that citation
+is wrong: `Control_CheckUpdates()` reads at most **399 bytes** per poll
+(`char buffer[400]`, `read(ControlFifo, buffer, sizeof(buffer)-1)`,
+`control.c:401,409`) and, by its own doc comment, assumes a whole command
+arrives in one read — a split command is not reassembled, and the orphaned
+tail additionally aborts the *next* read's batch
+(`Control_ProcessBuffer`'s `while (ok && cmdend && *cmd)`, `control.c:371`).
+At 32 entries the worst-case batch (832 B) exceeds the real window on every
+`send_key` path, including the `frames` path, where lines are queued
+against a frozen emulator and coalesce into one contiguous unread blob read
+as a single ≤399-byte chunk on resume — not a rare edge case, but the
+feature's primary composed flow. `KEYS_MAX` is therefore derived from the
+real window instead of the spec's pinned number:
+`(399 − 35 B sentinel headroom) / 26 B worst-case line
+("hatari-event keypress 255") = 14`, enforced by a compile-time `const`
+assertion (`input_wire.rs`) so a future token-table change cannot silently
+reopen the gap. This mirrors the codebase's existing `write_line` precedent
+(`fifo/mod.rs`): pin the per-write invariant that is provably safe, do not
+engineer a timing-based mitigation (ADR-7's anti-blind-sleep stance would
+reject one anyway) — ruling obtained from rust-architect before
+implementation rather than silently guessed.
+**Alternatives considered:** Shipping `KEYS_MAX = 32` as spec'd and
+documenting the corruption risk as accepted (rejected by rust-architect
+ruling: not rare, not confined to the no-confirm Paused path, and directly
+contradicts the spec's own stated safety rationale for the number).
+Byte-precise runtime validation (keys ≤ 32 *and* total bytes ≤ budget)
+instead of a single lower entry cap (rejected: buys at most two extra
+entries in the char-only case for a second validation surface and a
+harder-to-explain rejection). Erroring when paused (rejected: discards the
+free queue-on-freeze behavior and worsens the agent flow). Auto
+thaw-send-refreeze (rejected: uncontrolled frame count — the `frames` arg
+does it deterministically with existing machinery). A separate `send_text`
+tool (rejected: alnum-only subset of the sequence path, second validation
+surface, no new capability). Exposing mouse events as a separate tool
+(rejected: same wire path, three parse-table lines). Cross-call queued-byte
+tracking to close the residual multi-call-while-paused risk (rejected:
+couples session state to every resume path for a corner only the caller
+controls — documented instead, see Consequences).
+**Consequences:** Interactive prototypes are drivable headless with
+deterministic capture; press+release lands in one main-loop slice, so
+state-polling programs need down/frames/up (documented on the tool); the
+single-char path rides the host SDL keymap (uppercase auto-shifts,
+layout-odd chars should use scancodes). Sequences longer than 14 need
+multiple calls — acceptable, since the tool is cheap and stateless, and 14
+still covers an 8.3 GEMDOS filename plus `.` and enter. Accepted residual
+risk: stacking several *queued* `send_key` calls while Paused (no `frames`)
+can still accumulate more than 399 unread bytes in the pipe — per-call
+bounding cannot close this without cross-call queue accounting; the tool's
+`queued: true` semantics document that a caller should resume/run_frames
+between batches rather than stacking many queued calls.
+
+## 2026-07-11 — ADR-45: Symbol-aware addressing — Hatari resolves, the server lists
+
+**Status:** accepted
+**Context:** TOS relocates GEMDOS-launched programs, so demo developers
+hand-computed label addresses (MCP_TODOS §2). Hatari v2.4.1 already loads
+DRI/GST symbol tables (autoload on debugger entry, `symbols prg`/`symbols
+<file> [T [D B]]`) and resolves bare names in `evaluate` expressions and
+`b` conditions (evaluate.c getValue; breakcond.c ParseValue — both verified
+at the v2.4.1 tag). What was missing: an MCP surface, auto-detected section
+bases, and label names in tools.
+**Decision:** (1) One grouped `symbols` tool (load/list/free). (2) Hatari
+is the ONLY name→address authority: `resolve_addr` = `Addr::parse` first
+(numbers are never reinterpreted — strict superset of the old behavior),
+then `evaluate <name>` on parse failure. (3) Listing is served from a
+Rust-side mirror parsed from the same file with the same offset rules —
+Hatari's own `symbols name|code|data` is FORBIDDEN on the wire because
+v2.4.1's Symbols_Show pages via fgets(stdin) every ~20 rows, which
+deadlocks the main loop (Running) or corrupts the stdin control plane
+(Paused); new grep-gate (`tests/symbols_live.rs`'s
+`symbols_listing_pager_grep_gate`). (4) Auto base = existing
+`debug::basepage` (ADR-31) feeding explicit `$hex` T/D/B offsets; PRG
+sources are relocated by Hatari itself against the same basepage. (5)
+Blast radius: exactly profile/disasm/breakpoint take names (breakpoint
+needed zero plumbing — Hatari's breakcond resolves at arm time, only an
+arm-failure hint was added); widening the other ~12 address-taking tools
+is a mechanical `parse_addr`→`resolve_addr` swap left for demand. (6) vasm
+`-L` listings are NOT ingestible (Hatari accepts nm-ASCII or in-PRG tables
+only); vasm `-Ftos` embeds a DRI table by default, so the primary workflow
+needs no extra files.
+**Alternatives considered:** resolving from the server-side store (rejected:
+dual authority drifts from autoload/free/program-exit); generating a Hatari
+config file to raise nSymbolLines and use native listing (rejected: touches
+global spawn behavior to work around a listing we can serve better
+ourselves); symbol support in all ~15 address-taking tools (rejected:
+blast radius, and the seam makes later widening one line per tool).
+**Consequences:** label workflows cost one extra `evaluate` round-trip per
+name; a name that is also a register/variable (a0, VBL, TEXT) resolves to
+the register — documented, matches native debugger behavior; names outside
+[A-Za-z0-9_] load but cannot be referenced (Hatari's tokenizer, not ours);
+the store must be cleared on stop/free or `list` lies. One implementation
+note versus the phase spec: the ripper-side DRI/GST parser
+(`ripper::prg_symbols::parse_dri`) checks only the RELOCATED symbol's
+upper section bound (`addr < section_end`), not a lower bound — a symbol
+whose raw value happens to be small enough to land before its own
+section's base (observable only when `use_bssdata_offset`'s TEXT-relative
+branch fires for a DATA/BSS symbol) is still accepted rather than skipped;
+the spec's §2.5 wording ("past its section end") only pins the upper
+check, so this is a literal reading, not a deviation — flagged here for
+visibility since it's a corner the live test (§10.2) doesn't exercise.

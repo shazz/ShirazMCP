@@ -29,6 +29,16 @@ fn parse_loaded_counts(rest: &str) -> Option<SymbolLoad> {
     Some(SymbolLoad::Loaded { total, text })
 }
 
+/// The '…' path inside "Loaded N symbols (M …) from '<path>'." (P26 §5.1)
+/// — None when absent. Tolerates both v2.4.1 "(M TEXT)" and HEAD "(M for
+/// code)" since it only looks at the trailing `from '...'.` clause.
+pub fn parse_loaded_path(out: &str) -> Option<String> {
+    let line = out.lines().find(|l| l.starts_with("Loaded "))?;
+    let after_from = line.rsplit_once("from '")?.1;
+    let path = after_from.strip_suffix("'.")?;
+    Some(path.to_string())
+}
+
 /// Parse `screenshot` output: a line containing both "Screen dump to" and
 /// "succeeded" means success.
 pub fn parse_screenshot(out: &str) -> Result<()> {
@@ -65,6 +75,23 @@ mod tests {
                 text: 40
             }
         );
+    }
+
+    #[test]
+    fn loaded_path_v241_shape() {
+        let line = "Loaded 184 symbols (40 TEXT) from 'x'.";
+        assert_eq!(parse_loaded_path(line).as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn loaded_path_head_shape() {
+        let line = "Loaded 184 symbols (40 for code) from '/a/b.prg'.";
+        assert_eq!(parse_loaded_path(line).as_deref(), Some("/a/b.prg"));
+    }
+
+    #[test]
+    fn loaded_path_absent_without_from() {
+        assert_eq!(parse_loaded_path("Loaded 0 symbols."), None);
     }
 
     #[test]

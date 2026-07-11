@@ -109,12 +109,21 @@ pub(super) async fn wait_for_fifo(config: &HatariConfig) -> Result<()> {
     Ok(())
 }
 
-pub(super) async fn open_fifo_write(config: &HatariConfig) -> Result<tokio::fs::File> {
+/// `timeout_ms` is an explicit parameter (not `config.boot_timeout_ms`
+/// internally) so `spawn/recover.rs`'s post-EPIPE reopen (P27/ADR-43 §4.3)
+/// can use its own short, pinned bound — that open either succeeds
+/// instantly (a live Hatari holds the read end open) or never (a mid-exit
+/// Hatari has already removed the fifo file) — without duplicating this
+/// function. The boot-time caller keeps passing `config.boot_timeout_ms`.
+pub(super) async fn open_fifo_write(
+    config: &HatariConfig,
+    timeout_ms: u64,
+) -> Result<tokio::fs::File> {
     let mut opts = tokio::fs::OpenOptions::new();
     let open = opts.write(true).open(config.fifo_path());
-    tokio::time::timeout(Duration::from_millis(config.boot_timeout_ms), open)
+    tokio::time::timeout(Duration::from_millis(timeout_ms), open)
         .await
-        .map_err(|_| timeout_err("opening hatari fifo for write", config.boot_timeout_ms))?
+        .map_err(|_| timeout_err("opening hatari fifo for write", timeout_ms))?
         .map_err(|e| Error::Fifo {
             context: "open fifo for write".to_string(),
             source: e,

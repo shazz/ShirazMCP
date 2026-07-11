@@ -5,7 +5,7 @@ description: How to drive the ShirazMCP MCP server — run, freeze/debug, profil
 
 # Using the ShirazMCP MCP server
 
-ShirazMCP drives the Hatari Atari ST/STE emulator through **36 MCP tools** — a
+ShirazMCP drives the Hatari Atari ST/STE emulator through **37 MCP tools** — a
 "freezer cartridge for agents" with a full Action-Replay toolkit: boot, **freeze**,
 inspect CPU/video/sound, disassemble, profile, **rip** graphics/music/packed
 data/boot sectors, **hot-patch** 68k live, **persist** the hack, and **watch/search**
@@ -24,10 +24,12 @@ Stopped ──start──▶ Running ⇄ (pause/resume) ⇄ Paused ──stop─
 - `status` = session state. `machine_state` = the emulated ST's CPU+video+screen. `ym_state`
   = the sound chip's live state. Don't confuse them.
 
-## Tool catalog (36)
+## Tool catalog (37)
 **Lifecycle:** `start` · `stop` · `pause` · `resume` · `status`
 **Debug & memory:** `registers` · `read_memory` · `write_memory` · `search_memory` ·
 `screenshot` · `debug` (raw Hatari debugger command — escape hatch)
+**Symbols:** `symbols(action=load|list|free)` — register a label map so `disasm`/`profile`/
+`breakpoint` accept names like `BlitSphere` instead of addresses.
 **Analyze:** `disasm` (`source=snapshot|live`) · `profile(from,to)` ·
 `profile_frame(frames[,from,to])` — per-frame cost over N VBL frames; from/to filter
 which code counts (range) vs. everything executed (total ≈160256 always for
@@ -62,12 +64,34 @@ bootsector · **zx0** · noop-deprotect.
 
 ## Key concepts
 - **Addresses are `$`-hex**; load/BSS addresses vary per run — resolve live, don't cache.
+  `disasm`/`profile`/`breakpoint` also accept a label name once `symbols(action=load)` has
+  run — see "Symbols & label addressing" below.
 - **`Finding` handles, not bytes** — `rip`/`find_picture`/`identify_music`/`bootsector` return
   compact findings; `extract(id, as=…)` materializes (`png` inline + file, `prg`, `raw`).
 - **Recursion is free** — `rip(kind=picture, depth=2)` finds a picture packed *inside* Pack-Ice/
   Atomik/PowerPacker/RNC/**ZX0** data; check `via:`.
 - **`screenshot`** = Hatari's rendered frame; **`machine_state`**'s render decodes RAM at the
   shifter base (a back buffer on double-buffered demos → shows what's being *drawn*).
+
+## Symbols & label addressing
+Register a map once, then pass names instead of hand-computed addresses to exactly
+three tools: `disasm(addr=…)`, `profile(from=…,to=…)`, `breakpoint(condition="pc = …")`.
+Everything else still takes only `$hex`/decimal.
+- **`symbols(action="load")`** with no `path` loads the running GEMDOS-HD program's own
+  table (`vasm -Ftos` embeds a DRI table by default — build normally, no `-nosym`) and
+  Hatari relocates it to the real load address itself.
+- **`symbols(action="load", path="/…/x.sym")`** loads an nm-style ASCII map
+  (`"70000 T main"` lines) — TEXT/DATA/BSS offsets auto-detect from the GEMDOS basepage,
+  or pass them explicitly: `text_offset="$70000"` (data/bss default to it).
+- **`symbols(action="load", path="/…/x.prg")`** loads a symbol-bearing `.PRG` file the
+  same way as the no-path case, just from an arbitrary path.
+- **`symbols(action="list", find="sphere")`** browses the loaded map server-side —
+  always narrow with `find=` first; it's capped (32 default / 128 max) before paging.
+- **Reachability caveat:** only `[A-Za-z0-9_]` names resolve in expressions (Hatari's
+  tokenizer) — a label with `.`/`-` loads and lists but can't be passed as `addr`/
+  `condition`. A register/variable of the same name (`a0`, `pc`, `VBL`, `TEXT`) always
+  shadows a symbol.
+- `symbols(action="free")` unloads; the session's own `stop` clears it too.
 
 ## Canonical workflows
 - **Boot & look:** `start` → `machine_state` / `screenshot` / `ym_state`.
@@ -110,6 +134,10 @@ bootsector · **zx0** · noop-deprotect.
 - Deprotection is interface-only (`noop-deprotect`) — protected programs self-decrypt in RAM anyway.
 
 ## Escape hatch
-`debug(command)` runs one raw Hatari debugger command (`m`, `evaluate`, `symbols`, `info ym`,
-`savebin`, …) and returns its output. See `docs/plan/*.md` (per-feature detail),
-`docs/live-patching.md` (RE/patch tutorial), `ARCHITECTURE.md`/`decisions.md`.
+`debug(command)` runs one raw Hatari debugger command (`m`, `evaluate`, `info ym`,
+`savebin`, …) and returns its output. **Never** send `symbols name`/`symbols code`/
+`symbols data` through it — that's Hatari's own listing form, which pages via
+`fgets(stdin)` every ~20 rows and will deadlock the emulator (Running) or corrupt the
+command stream (Paused); use the `symbols` tool's `action=list` instead. See
+`docs/plan/*.md` (per-feature detail), `docs/live-patching.md` (RE/patch tutorial),
+`ARCHITECTURE.md`/`decisions.md`.

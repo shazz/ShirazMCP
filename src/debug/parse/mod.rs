@@ -18,7 +18,7 @@ use crate::error::Error;
 pub use cpureg::parse_cpureg;
 pub use info_mfp::{parse_info_mfp, MfpRegs};
 pub use info_ym::parse_info_ym;
-pub use status::{parse_screenshot, parse_symbols};
+pub use status::{parse_loaded_path, parse_screenshot, parse_symbols};
 pub use values::{parse_evaluate, parse_memdump};
 
 pub(super) fn parse_err(context: &str, input: impl Into<String>) -> Error {

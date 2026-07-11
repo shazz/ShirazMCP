@@ -120,6 +120,9 @@ impl HatariServer {
             AnySession::Running(s) => AnySession::Stopped(s.stop().await),
             AnySession::Paused(s) => AnySession::Stopped(s.stop().await),
         };
+        // P26 §7.5: Hatari's symbol table dies with the process — a stale
+        // listing mirror must not answer `symbols(action="list")`.
+        self.clear_symbol_store();
         Ok(Json(StateOutput {
             state: "stopped".to_string(),
         }))
@@ -185,16 +188,41 @@ impl HatariServer {
         name = "status",
         description = "Report emulator session status: current state \
                        (stopped|running|paused), configured Hatari binary \
-                       path, and server version."
+                       path, and server version. Also probes a live child: \
+                       if Hatari exited without the session noticing (the \
+                       fifo/stdin FSM has no other way to detect this), \
+                       resets to stopped and reports the exit in `note` — \
+                       the only tool that self-heals a defunct session."
     )]
     pub async fn status(&self) -> Result<Json<StatusOutput>, McpError> {
-        let session = self.session.lock().await;
+        let mut guard = self.session.lock().await;
+        let note = reap_if_dead(&mut guard);
         Ok(Json(StatusOutput {
-            state: session.state_name().to_string(),
-            hatari_path: session.config().hatari_path.display().to_string(),
+            state: guard.state_name().to_string(),
+            hatari_path: guard.config().hatari_path.display().to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
+            note,
         }))
     }
+}
+
+/// If the FSM says Running/Paused but the child has already exited
+/// (P27/ADR-43 §4.5 — EPIPE-detecting tools only surface this on their next
+/// call; `status` is the one place that probes proactively), reset the
+/// session to Stopped and say why. `None` for a Stopped session (nothing to
+/// probe) or a live, still-running child — the common, silent case.
+///
+/// `Implementation note` (P27 §4.6): the dead-child arm needs a real exited
+/// `Child`, which only `HatariProcess::spawn` produces — not unit-testable
+/// without a process; covered by the `#[ignore]`d live test instead.
+fn reap_if_dead(guard: &mut AnySession) -> Option<String> {
+    let old_state = guard.state_name();
+    let config = guard.config().clone();
+    let status = guard.process_mut()?.exit_status()?;
+    *guard = AnySession::new(config);
+    Some(format!(
+        "hatari exited ({status}) while session was {old_state}; reset to stopped"
+    ))
 }
 
 /// Wire shape of `status`. Field names are the JSON contract.
@@ -203,6 +231,9 @@ pub struct StatusOutput {
     pub state: String,
     pub hatari_path: String,
     pub version: String,
+    /// Set only when `status` had to self-heal a defunct session (P27/ADR-43).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[cfg(test)]
@@ -281,5 +312,29 @@ mod tests {
         let _ = server.start(Parameters(no_override_args())).await;
         let status = server.status().await.expect("status after failed start");
         assert_eq!(status.0.hatari_path, "/nonexistent/only-hatari");
+    }
+
+    /// P27/ADR-43 §4.6: `status` on a genuinely `Stopped` session has
+    /// nothing to probe — `note` stays `None`, and existing callers that
+    /// never look at the new field keep passing unmodified.
+    #[tokio::test]
+    async fn status_on_stopped_session_has_no_note() {
+        let server = HatariServer::new(HatariConfig::default());
+        let status = server.status().await.expect("status on a stopped session");
+        assert_eq!(status.0.state, "stopped");
+        assert!(status.0.note.is_none());
+    }
+
+    /// `reap_if_dead` itself, in isolation: a `Stopped` `AnySession` has no
+    /// live process to probe (`process_mut()` returns `None`), so the `?`
+    /// short-circuits to `None` before ever touching `exit_status`. The
+    /// dead-child arm needs a real exited `Child` (only `HatariProcess::spawn`
+    /// produces one) and is covered by the `#[ignore]`d live test instead
+    /// (P27 §4.6 `Implementation note`).
+    #[test]
+    fn reap_if_dead_is_noop_for_stopped_session() {
+        let mut guard = AnySession::new(HatariConfig::default());
+        assert_eq!(reap_if_dead(&mut guard), None);
+        assert_eq!(guard.state_name(), "stopped");
     }
 }
