@@ -17,3 +17,4 @@ scratchpad/
 
 # vintage cartridge dump — not redistributed
 assets/URIPPER.PRG
+db/*.jsonl
