@@ -61,7 +61,8 @@ class McpClient:
                 return None
             if not self._sel.select(timeout=remaining):
                 continue
-            chunk = self.proc.stdout.read1(65536)
+            out = self.proc.stdout                       # bufsize=0 -> raw FileIO (no read1)
+            chunk = out.read1(65536) if hasattr(out, "read1") else out.read(65536)
             if not chunk:
                 raise RuntimeError("server closed stdout")
             self._buf += chunk
