@@ -79,8 +79,11 @@ pub struct ProfileOutput {
     /// Instructions the static model could not cost (counted at 4 cycles).
     pub static_unknown: usize,
     /// measured_cycles / 160256 (falls back to static_cycles_contended
-    /// when measurement is absent).
+    /// when measurement is absent). VBLs the effect spans; <1 = sub-frame.
     pub vbl_fraction: f64,
+    /// Same cycles / 512 — scanlines (HBLs) the effect spans (313 HBL = 1 VBL).
+    /// The natural raster-budget unit when vbl_fraction < 1.
+    pub hbl_count: f64,
     /// The raw `profile save` file (ADR-5: bulk data stays on disk).
     pub profile_path: String,
     /// Always "paused" on success — profiling ends frozen at `to`.
@@ -100,7 +103,9 @@ pub(crate) fn build_output(
 ) -> ProfileOutput {
     let contended = cycles::contended_cycles(&estimate, region.to_region());
     let has_data = instructions > 0;
-    let vbl_fraction = cycles::vbl_fraction(if has_data { measured_cycles } else { contended });
+    let eff = if has_data { measured_cycles } else { contended };
+    let vbl_fraction = cycles::vbl_fraction(eff);
+    let hbl_count = cycles::hbl_count(eff);
     ProfileOutput {
         from: from.to_string(),
         to: to.to_string(),
@@ -112,6 +117,7 @@ pub(crate) fn build_output(
         region: region.name().to_string(),
         static_unknown: estimate.unknown,
         vbl_fraction,
+        hbl_count,
         profile_path: path.display().to_string(),
         state: "paused".to_string(),
     }
@@ -154,6 +160,7 @@ mod tests {
         );
         assert_eq!(out.static_cycles_contended, 180);
         assert_eq!(out.vbl_fraction, 180.0 / 160_256.0);
+        assert_eq!(out.hbl_count, 180.0 / 512.0);
         assert_eq!(out.measured_cycles, None);
 
         let out2 = build_output(
@@ -166,6 +173,7 @@ mod tests {
             std::path::PathBuf::from("/tmp/p.txt"),
         );
         assert_eq!(out2.vbl_fraction, 999.0 / 160_256.0);
+        assert_eq!(out2.hbl_count, 999.0 / 512.0);
         assert_eq!(out2.measured_cycles, Some(999));
     }
 }

@@ -83,6 +83,13 @@ pub fn vbl_fraction(cycles: u64) -> f64 {
     cycles as f64 / f64::from(VBL_CYCLES)
 }
 
+/// `cycles / SCANLINE_CYCLES` — how many scanlines (HBLs) the code spans.
+/// The natural raster-budget unit for sub-frame effects (`vbl_fraction < 1`);
+/// 313 HBL = one VBL.
+pub fn hbl_count(cycles: u64) -> f64 {
+    cycles as f64 / f64::from(SCANLINE_CYCLES)
+}
+
 /// EA calculation cost (bw, l) by resolved mode — reference §"Time to
 /// calculate effective addresses". Index = EaMode discriminant.
 /// Dn/An = 0 (register direct adds nothing).
@@ -202,5 +209,7 @@ mod tests {
         assert_eq!(VBL_CYCLES, 160_256);
         assert_eq!(SCANLINE_CYCLES, 512);
         assert_eq!(vbl_fraction(80_128), 0.5);
+        assert_eq!(hbl_count(1024), 2.0); // 1024 cy = 2 scanlines
+        assert_eq!(hbl_count(VBL_CYCLES.into()), 313.0); // one frame = 313 HBL
     }
 }

@@ -75,7 +75,8 @@ bootsector · **zx0** · noop-deprotect.
   driver — ~20 drivers, ~30% of the SNDH archive; degrades to `"unknown"`, never guesses).
   `ym_state` for the live chip. `spectrogram(3)` to see it.
 - **Debug:** `breakpoint(set, pc=$X)` → `resume` → freezes on hit → `registers`/`disasm(live)`.
-  `profile(from,to)` for cycles. `state(save|load)` to snapshot/restore.
+  `profile(from,to)` for cycles + `vbl_fraction`/`hbl_count` (raster budget: how many
+  VBLs, or scanlines when sub-frame). `state(save|load)` to snapshot/restore.
 - **Reverse-engineer a live value (the RE loop):** to find *who writes* a table/copy, `watch(addr,
   on=write)` → `resume` → the fired PC is the writer. To find a *variable* (score, cursor),
   `cheat_scan(new)` → `run_frames`/`resume` → `cheat_scan(filter, changed|increased)` → narrow →

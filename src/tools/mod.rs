@@ -167,7 +167,8 @@ impl ServerHandler for HatariServer {
                  loader/virus heuristics — from RAM or a .ST image). \
                  Analyze: disasm (Capstone 68k over a snapshot, or Hatari \
                  live), profile (measured + blind/contended static cycles \
-                 between two PCs), breakpoint (managed one-shot \
+                 between two PCs, as raw cycles AND vbl_fraction / hbl_count \
+                 raster budget), breakpoint (managed one-shot \
                  run-to-break), state (save/load emulator snapshots). \
                  Status: machine_state \
                  (one-call frozen snapshot — CPU registers + SR flags, \
