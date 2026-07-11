@@ -91,6 +91,10 @@ bootsector · **zx0** · noop-deprotect.
   state can't be recovered (beam position, in-flight DMA, MFP timer phase) — reported in `not_restored`.
 
 ## Gotchas
+- **`read_memory` returns at most 1024 bytes/call** (an agent-context guard) and hands back
+  `next_addr` — page with it to walk a larger region. Don't request 64 KB expecting 64 KB; you
+  get 1 KB. (Whole-RAM work — `rip`, `find_picture`, `machine_state` — uses the internal full-RAM
+  dump, not `read_memory`, so it isn't affected.)
 - **Don't arm breakpoints via raw `debug("b …")`** — use the managed `breakpoint`/`watch` tools.
 - `write_memory`/`patch` chunk long writes internally (Hatari's line limit) — writes of any size work.
 - `watch` catches *writes that change the value* (not reads, not same-value writes) — reads → `xrefs`.
