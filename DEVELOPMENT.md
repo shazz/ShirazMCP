@@ -155,3 +155,13 @@ cargo test --test <name> -- --ignored --nocapture
 Files ≤400 non-test lines, functions ≤30 lines, no `unwrap`/`panic` in library
 paths. New non-trivial decisions get an ADR in `decisions.md`; structural
 changes update `ARCHITECTURE.md`.
+
+**Pre-commit hook.** A tracked hook at `.githooks/pre-commit` runs the exact CI
+gate (fmt-check + clippy `-D warnings` + tests) before every commit. Enable it
+once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+Skip it for a single commit with `git commit --no-verify`.

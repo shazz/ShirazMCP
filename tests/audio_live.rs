@@ -15,13 +15,13 @@
 use std::collections::HashSet;
 use std::process::Command;
 
+use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::CallToolResult;
+use rmcp::ErrorData as McpError;
 use shiraz_mcp::session::SessionConfig;
 use shiraz_mcp::tools::audio::{RecordAudioArgs, RecordAudioOutput, SpectrogramArgs};
 use shiraz_mcp::tools::lifecycle::StartArgs;
 use shiraz_mcp::tools::HatariServer;
-use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::CallToolResult;
-use rmcp::ErrorData as McpError;
 
 fn mjj_config() -> SessionConfig {
     SessionConfig {

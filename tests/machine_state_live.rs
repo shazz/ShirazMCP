@@ -18,12 +18,12 @@ use std::process::Command;
 use std::time::Duration;
 
 use base64::Engine;
+use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::CallToolResult;
 use shiraz_mcp::session::SessionConfig;
 use shiraz_mcp::tools::lifecycle::StartArgs;
 use shiraz_mcp::tools::machine_state::MachineStateArgs;
 use shiraz_mcp::tools::HatariServer;
-use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::CallToolResult;
 
 fn mjj_config() -> SessionConfig {
     SessionConfig {

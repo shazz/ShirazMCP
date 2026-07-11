@@ -1,7 +1,7 @@
 use anyhow::Result;
+use rmcp::{transport::io::stdio, ServiceExt};
 use shiraz_mcp::session::SessionConfig;
 use shiraz_mcp::tools::HatariServer;
-use rmcp::{transport::io::stdio, ServiceExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
