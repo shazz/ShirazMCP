@@ -31,11 +31,19 @@ pub struct HatariConfig {
     pub boot_timeout_ms: u64,
 }
 
+/// Read a path from an env var, falling back to a compiled-in default. Lets a
+/// deployed binary find the local `hatari`/TOS without a rebuild.
+fn env_path(key: &str, fallback: &str) -> PathBuf {
+    std::env::var(key)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(fallback))
+}
+
 impl Default for HatariConfig {
     fn default() -> Self {
         Self {
-            hatari_path: PathBuf::from("/usr/bin/hatari"),
-            tos_path: PathBuf::from("/path/to/projects/MJJ/bin/hatari/TOS/tos162fr.img"),
+            hatari_path: env_path("SHIRAZMCP_HATARI", "/usr/bin/hatari"),
+            tos_path: env_path("SHIRAZMCP_TOS", "/path/to/tos.img"),
             harddrive: None,
             machine: "ste".to_string(),
             memsize_mb: 1,
