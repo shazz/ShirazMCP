@@ -53,12 +53,26 @@ def sndh_tags(buf: bytes) -> dict:
     return m
 
 
-def read_range(c, base, total, step=4096) -> bytes:
+def read_range(c, base, total, step=1024) -> bytes:
+    # read_memory returns at most 1024 bytes/call — step must stay <= that or
+    # reads come back sparse (gappy), which wrecks the fingerprint.
     out = bytearray()
-    for off in range(0, total, step):
-        r = c.call("read_memory", {"addr": f"${base + off:X}", "count": min(step, total - off)})
+    while len(out) < total:
+        r = c.call("read_memory", {"addr": f"${base + len(out):X}", "count": min(step, total - len(out))})
         out += bytes.fromhex(r["bytes_hex"])
-    return bytes(out)
+    return bytes(out[:total])
+
+
+def match_region(region: bytes, tunes, index):
+    hdns = region.find(b"HDNS")
+    ds = (hdns + 4) if hdns != -1 else 0
+    votes = Counter()
+    cs = chunk_set(region[ds + (ds & 1):])
+    for ch in cs:
+        for tid in index.get(ch, []):
+            votes[tid] += 1
+    disc = sum(1 for ch in cs if ch in index)
+    return votes, disc
 
 
 def main() -> None:
@@ -78,28 +92,31 @@ def main() -> None:
         c.call("start", {"harddrive": sys.argv[1], "machine": "ste", "memsize_mb": 1}, timeout=30)
         c.call("run_frames", {"frames": 500}, timeout=40)
 
-        hits = c.call("search_memory", {"pattern_ascii": "SNDH", "limit": 8})["hits"]
+        hits = c.call("search_memory", {"pattern_ascii": "SNDH", "limit": 16})["hits"]
+        bases = []
         for h in hits:
             a = int(h["addr"].replace("$", ""), 16)
             if bytes.fromhex(c.call("read_memory", {"addr": f"${a-12:X}", "count": 2})["bytes_hex"]) == b"\x60\x00":
-                base = a - 12
-                break
-        else:
+                bases.append(a - 12)          # bra.w header — real SNDH image
+        bases.sort()
+        if not bases:
             print("no embedded SNDH image found"); return
+        print(f"found {len(bases)} embedded SNDH tune(s) at {[hex(b) for b in bases]}\n")
 
-        region = read_range(c, base, 96 * 1024)
-        print("SNDH header tags:", sndh_tags(region))
-
-        hdns = region.find(b"HDNS")
-        ds = (hdns + 4) if hdns != -1 else 0
-        cs = chunk_set(region[ds + (ds & 1):])
-        votes = Counter()
-        for ch in cs:
-            for tid in index.get(ch, []):
-                votes[tid] += 1
-        print("fingerprint match (top 3):")
-        for tid, v in votes.most_common(3):
-            print(f"  {v:3d}  {tunes[tid].get('composer','?')} / {tunes[tid].get('title','?')}")
+        # identify each tune, bounded by the next SNDH so tunes don't blend
+        for k, base in enumerate(bases):
+            end = bases[k + 1] if k + 1 < len(bases) else base + 8192
+            region = read_range(c, base, end - base)
+            tags = sndh_tags(region)
+            votes, disc = match_region(region, tunes, index)
+            print(f"@ {hex(base)}  tags={tags}")
+            if votes:
+                tid, v = votes.most_common(1)[0]
+                t = tunes[tid]
+                print(f"  fingerprint -> {t.get('composer','?')} / {t.get('title','?')}  "
+                      f"({v}/{disc} chunks)  [{t['file']}]\n")
+            else:
+                print(f"  fingerprint -> no DB match ({disc} discriminative chunks)\n")
     finally:
         c.call("stop")
         c.close()
