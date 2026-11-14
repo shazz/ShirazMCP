@@ -93,9 +93,9 @@ Scale to 8-bit for PNG: ST `v*255/7`, STE `v*255/15`.
   is usually N planes × 16px-wide word columns.
 - See also: `atari-st-degas` (PI1/PC1 wrap this data), `atari-st-neochrome` (NEO).
 
-## Reference implementations (in `../Atari_ST_Sources`)
+## Reference implementations (third-party, not bundled)
 
-Paths relative to `$HOME/projects/Atari_ST_Sources`:
+Paths relative to the root of a local clone of the public Atari_ST_Sources collection (https://github.com/ggnkua/Atari_ST_Sources; clone it yourself — it is NOT bundled and each file keeps its own author's licence):
 
 - **`ASM/Lineout/Stone Tower/src/STLOWC2P.S`** — textbook **chunky→planar (c2p)** for
   ST-low via lookup table; clearest plane-interleave reference (reverse for decode).

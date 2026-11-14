@@ -4,5 +4,4 @@ error[E0599]: no method named `pause` found for struct `shiraz_mcp::session::Ses
 6 |     let _ = s.pause();
   |               ^^^^^ method not found in `shiraz_mcp::session::Session<shiraz_mcp::session::Stopped>`
   |
-  = note: the method was found for
-          - `shiraz_mcp::session::Session<shiraz_mcp::session::Running>`
+  = note: the method was found for `shiraz_mcp::session::Session<shiraz_mcp::session::Running>`

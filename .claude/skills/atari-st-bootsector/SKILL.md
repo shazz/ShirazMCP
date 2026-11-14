@@ -93,10 +93,9 @@ bootsector_scan(sector: &[u8;512]) -> BootFinding {
 
 Add to the depacker/format registry like any other plugin — one file, one line.
 
-## Reference implementations (in `../Atari_ST_Sources`)
+## Reference implementations (third-party, not bundled)
 
-Real ST boot-sector code to model the plugin's decode/heuristics on (paths relative
-to `$HOME/projects/Atari_ST_Sources`):
+Real ST boot-sector code to model the plugin's decode/heuristics on. Paths relative to the root of a local clone of the public Atari_ST_Sources collection (https://github.com/ggnkua/Atari_ST_Sources; clone it yourself — it is NOT bundled and each file keeps its own author's licence):
 
 - **`ASM/Adrenalin U.K (ADR)/BOOT_BLK/ZR_BLK.S`** — a *"ZEN REPUBLIC Virus Free Boot
   Sector"*: real bootblock code that **checks the reset vector (`$426`) and scans
@@ -114,7 +113,7 @@ bootblock performs — exactly the classification the plugin automates.
 
 ### `r1pp3r` — the reference boot-cracktro ripper ⭐
 
-**`refs/orionfuzion/r1pp3r/src/R1PP3R.S`** (68k asm, cloned) is the closest existing
+**`R1PP3R.S`** by Orion/Fuzion (68k asm; clone it under `refs/`, which is gitignored) is the closest existing
 tool to what this plugin + the ripper engine should do together. It rips **boot
 cracktros** — cracktros stored directly on disk sectors (no filesystem) and launched
 by the bootsector — and saves them as runnable `.PRG`. Technique to learn from:
@@ -126,5 +125,5 @@ by the bootsector — and saves them as runnable `.PRG`. Technique to learn from
 3. Reassembles the loaded cracktro and wraps it as a standalone GEM `.PRG`.
 
 Built for archival (Demozoo). This is the blueprint for our "freeze → follow loads →
-extract → save as PRG" flow. `prebuilt/R1PP3R.PRG` runs it directly under Hatari.
+extract → save as PRG" flow. Its prebuilt `R1PP3R.PRG` runs directly under Hatari.
 

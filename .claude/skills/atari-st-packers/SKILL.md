@@ -46,10 +46,9 @@ On success the engine re-runs all detectors over the unpacked buffer (bounded
 recursion) — so "ICE-packed screen inside a packed demo file" resolves to a PI1
 `Finding` automatically.
 
-## Reference implementations (in `../Atari_ST_Sources`)
+## Reference implementations (third-party, not bundled)
 
-Real, citeable source to port `Depacker` plugins from (paths relative to
-`$HOME/projects/Atari_ST_Sources`):
+Real, citeable source to port `Depacker` plugins from. Paths relative to the root of a local clone of the public Atari_ST_Sources collection (https://github.com/ggnkua/Atari_ST_Sources; clone it yourself — it is NOT bundled and each file keeps its own author's licence):
 
 - **`C/Toyoyo/stvn/deps/pack-ice/`** — cleanest **portable C** Pack-Ice: both pack
   (`ice_crunch.c`) and depack (`ice_decrunch.c`, handles both header variants), with

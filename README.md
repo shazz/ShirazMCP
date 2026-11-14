@@ -96,6 +96,33 @@ Full behavior, workflows, and gotchas are in the **[shirazmcp skill](.claude/ski
 gradient colours, and swapping its logo rows **live in RAM**, then persisting the result as a
 standalone `.PRG` — entirely through MCP tool calls.
 
+## Skills, agents and helper tools for reverse-engineering
+
+Claude Code picks these up automatically in this repo (`.claude/skills/`, `.claude/agents/`); copy
+a folder to `~/.claude/skills/` to use it from any project. They pair with the MCP tools: the skills
+tell the agent *what the hardware/format is*, the tools let it *look at a running ST*.
+
+| Skill | Use it for |
+|---|---|
+| `shirazmcp` | Driving the server: lifecycle, freeze/debug, rip, patch, persist |
+| `st-reverse-engineering` | **Start here.** Method: static first, escalation order, TOS conventions, ShirazMCP gotchas |
+| `atari-st-acsi-hdd` | Hard-disk work: ACSI/DMA registers, command sequence, root sector, AHDI/XHDI, `hdv_*` hooks, boot-sector driver (parts marked UNVERIFIED) |
+| `atari-st-hardware-map` / `m68000-cycles` / `ym2149-psg` / `atari-st-blitter` | Hardware registers, cycle counting, sound chip, blitter |
+| `atari-st-bitplanes` / `-degas` / `-neochrome` | Pictures: planar layout, Degas, NEO |
+| `atari-st-packers` / `-protections` / `-bootsector` | Packed, encrypted, boot-sector code |
+| `atari-st-ym-players` | SNDH and replay-routine identification |
+
+Agent: `ste-blitter-expert` (blitter hangs, HOG vs cooperative mode, skewed blits, cycle budgets).
+
+Scripts in [`tools/`](tools/README.md) (`prg_inspect.py`, `sndh_index.py`) triage a file before you
+boot anything. Typical session: `prg_inspect.py FOO.PRG` -> `start` the emulator with it ->
+`run_frames`, `rip`/`identify_music`, `watch`/`xrefs`/`disasm` on what you find, following the
+`st-reverse-engineering` skill. For a hard-disk driver (reverse-engineering or writing one) load
+`atari-st-acsi-hdd` and watch `$FF8604/$FF8606` and the `$472/$476` hooks with `watch`/`breakpoint`.
+
+Third-party reference documents (the Atari BLiTTER manual, 68000 timing tables, the Hollis hardware
+register list...) are **not** bundled in the skills; each skill links to where they are published.
+
 ## Platform support
 
 Builds and runs on **Linux** and **macOS**. **Windows** is not yet supported: the emulator is
@@ -113,4 +140,7 @@ protocol) is designed and tracked — see the issues.
 
 ## License
 
-[MIT](LICENSE) © shazz
+[MIT](LICENSE) © shazz. The skills, agents and tools under `.claude/` and `tools/` are MIT too.
+Third-party material is not relicensed: the register list embedded at `src/analyze/memory_map.txt`
+is by Dan Hollis (see its header for its terms), and the SNDH fingerprint database in `db/` is
+derived from the third-party SNDH archive.

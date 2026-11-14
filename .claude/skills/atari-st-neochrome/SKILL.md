@@ -33,9 +33,9 @@ by 16 plausible palette words. Optionally sanity-check width=320/height=200 at
 `+58/+60`. Then the 32000-byte body at `+128` decodes with the shared bitplane
 decoder.
 
-## Reference implementations (in `../Atari_ST_Sources`)
+## Reference implementations (third-party, not bundled)
 
-Paths relative to `$HOME/projects/Atari_ST_Sources`:
+Paths relative to the root of a local clone of the public Atari_ST_Sources collection (https://github.com/ggnkua/Atari_ST_Sources; clone it yourself — it is NOT bundled and each file keeps its own author's licence):
 
 - **`C/Jean Lusetti/Vision 4.1a/TOOLS/NEO_IO.C`** — best reference: an explicit
   `NEO_HEADER` struct documenting every field (zero word, res, 16-word palette,

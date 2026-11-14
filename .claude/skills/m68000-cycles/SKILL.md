@@ -1,9 +1,26 @@
 ---
 name: m68000-cycles
-description: Motorola 68000 instruction timing on the Atari ST (8 MHz) — cycle counting rules, effective-address timing, even-cycle rounding, ST bus/video contention, and how to estimate the cost of a code range. Use when profiling, cycle-counting between breakpoints, or reasoning about whether a routine fits in a scanline/VBL budget. Bundled reference tables in reference/.
+description: Motorola 68000 instruction timing on the Atari ST (8 MHz) — cycle counting rules, effective-address timing, even-cycle rounding, ST bus/video contention, and how to estimate the cost of a code range. Use when profiling, cycle-counting between breakpoints, or reasoning about whether a routine fits in a scanline/VBL budget.
 ---
 
 # 68000 instruction timing (Atari ST)
+
+## Step 0: check the reference files
+
+This skill's tables are summaries. For anything beyond them, read the full third-party
+document(s), which are NOT in this repo (licence) and live in your local `refs/` (gitignored):
+  - `refs/skills/m68000-cycles/68000_execution_cycles.md`
+
+Before relying on them, run:
+
+    python3 tools/fetch_refs.py --check --skill m68000-cycles
+
+- `ok`: read the file(s) above.
+- `missing` or `mismatch`: run `python3 tools/fetch_refs.py --fetch --skill m68000-cycles` (restores
+  from this repo's git history or the listed source, verified by sha256). If it still reports
+  missing, tell the user which document is missing and where to get it (the script prints the
+  sources), and continue from this skill's summary only: never fill in a table value from memory
+  and present it as coming from the document.
 
 The ST CPU is a **68000 at 8 MHz** → 1 clock = 125 ns. A VBL at 50 Hz is
 **160256 cycles**; one scanline ≈ 512 cycles (313 lines/frame). Fitting an effect
@@ -33,8 +50,8 @@ Rough anchors (register-direct, .w unless noted):
 | `bra` | 10 · `bsr` 18 · `rts` 16 |
 | `movem` | 8/12 + 4–8 per register |
 
-Use the bundled `reference/68000_execution_cycles.md` for the full table (EA modes,
-per-instruction detail) rather than trusting these anchors for anything tight.
+Use Motorola's *M68000 Family Programmer's Reference Manual* (section "Instruction Execution Times")
+or the Atari-Forum wiki / Yacht-style tables for the full table (EA modes, per-instruction detail) rather than trusting these anchors for anything tight.
 
 ## Atari ST contention (why static ≠ real)
 
@@ -43,8 +60,9 @@ bus cycles from the CPU during active display, and RAM/ROM/hardware regions diff
 
 - Reads/writes to video RAM during display can stall the CPU.
 - Access to `$FFFF82xx`/`$FFFF88xx` hardware and the MFP has its own timing.
-- The `cycle_counter_plan.md` reference documents the ST-specific contention model
-  worked out for the MJJ demo — reuse it.
+- On the ST every CPU bus access is rounded up to a 4-cycle boundary (bus slots shared with the video
+  shifter), which is why all timings are rounded to multiples of 4. Treat static sums as lower bounds
+  and confirm with `profile` / `profile_frame`.
 
 ## Two ways the MCP measures cost
 
@@ -59,7 +77,7 @@ bus cycles from the CPU during active display, and RAM/ROM/hardware regions diff
 
 `profile(from, to)` → `{ measured_cycles?, static_cycles, instructions, vbl_fraction }`
 
-## Reference files
+## Reference material (not bundled - third-party text)
 
-- `reference/68000_execution_cycles.md` — full instruction/EA timing tables.
-- `reference/cycle_counter_plan.md` — ST bus/video contention model (from MJJ).
+- *M68000 Family Programmer's Reference Manual* (Motorola/NXP), "Instruction Execution Times".
+- Atari-Forum wiki 68000 timing pages. Bundled tables were removed from this repo for licence reasons.

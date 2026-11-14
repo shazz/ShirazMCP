@@ -1,0 +1,46 @@
+{
+  "_about": "Third-party reference documents the skills read for detail beyond their own summaries. They are NOT in this repo (their licences are not MIT): each user keeps a local copy under refs/ (gitignored). tools/fetch_refs.py checks the copies (present + sha256) and restores missing ones from this repo's history or the listed sources.",
+  "history_commit": "f5c4993",
+  "documents": [
+    {
+      "id": "blitter-manual",
+      "skills": ["atari-st-blitter"],
+      "path": "refs/skills/atari-st-blitter/blitter_manual.md",
+      "title": "Atari ST BLiTTER manual (Atari Corp., 1987), Atari-Forum wiki transcription",
+      "licence": "Atari copyright; not redistributed here",
+      "sha256": "0f641b18a3a95551bef8b92b9eee7afa0cd122db507081a4c47c5b193c89c61c",
+      "history_path": ".claude/skills/atari-st-blitter/reference/blitter_manual.md",
+      "sources": ["https://www.atari-wiki.com/index.php?title=Blitter_manual&action=raw"]
+    },
+    {
+      "id": "blitter-times",
+      "skills": ["atari-st-blitter"],
+      "path": "refs/skills/atari-st-blitter/blitter_execution_times.md",
+      "title": "Blitter execution times (Atari-Forum wiki)",
+      "licence": "wiki content, licence unknown; not redistributed here",
+      "sha256": "b078fd08fa3cc1d5ee47a3e09895841d6460a6aa750100cb6f1d4ee6027cac8f",
+      "history_path": ".claude/skills/atari-st-blitter/reference/blitter_execution_times.md",
+      "sources": ["https://www.atari-wiki.com/index.php?title=Blitter_execution_times&action=raw"]
+    },
+    {
+      "id": "m68000-times",
+      "skills": ["m68000-cycles"],
+      "path": "refs/skills/m68000-cycles/68000_execution_cycles.md",
+      "title": "MC68000 instruction execution times (ST scene text file, author unknown)",
+      "licence": "unknown; not redistributed here. Primary source: Motorola M68000 Family Programmer's Reference Manual, 'Instruction Execution Times'",
+      "sha256": "8179d17c997cc4ed8b84424d3fb8522e5ce701444a3fe162ef8ed812fc1ad53b",
+      "history_path": ".claude/skills/m68000-cycles/reference/68000_execution_cycles.md",
+      "sources": []
+    },
+    {
+      "id": "hollis-registers",
+      "skills": ["atari-st-hardware-map", "atari-st-acsi-hdd"],
+      "path": "refs/skills/atari-st-hardware-map/memory_map.txt",
+      "title": "Atari ST/STe/MSTe/TT/F030 Hardware Register Listing v7.0 (Dan Hollis, 1994)",
+      "licence": "copy unmodified, in its entirety, freely, not sold; not MIT",
+      "sha256": "7aa3dc3b372b90204039167253f7bc69906c63790ce8c0657b9e2207e00ba233",
+      "history_path": ".claude/skills/atari-st-hardware-map/reference/memory_map.txt",
+      "sources": []
+    }
+  ]
+}

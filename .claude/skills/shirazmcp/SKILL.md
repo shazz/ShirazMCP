@@ -129,8 +129,8 @@ Everything else still takes only `$hex`/decimal.
 - **Don't arm breakpoints via raw `debug("b …")`** — use the managed `breakpoint`/`watch` tools.
 - `write_memory`/`patch` chunk long writes internally (Hatari's line limit) — writes of any size work.
 - `watch` catches *writes that change the value* (not reads, not same-value writes) — reads → `xrefs`.
-- The MJJ demo build: `MJJHACK.PRG` is **UPX-packed and symbol-less**; the sibling `STRGOOSE.PRG`
-  is unpacked (use it for `save_prg` / symbol work). Scan live RAM, not the on-disk file.
+- A UPX-packed or symbol-less `.PRG` has nothing useful on disk: scan live RAM, and use an unpacked
+  build of the same program (if you have one) for `save_prg` / symbol work.
 - Deprotection is interface-only (`noop-deprotect`) — protected programs self-decrypt in RAM anyway.
 
 ## Escape hatch

@@ -86,9 +86,9 @@ corpus. Fingerprints should be extracted from these, not hand-guessed.
 To rip as a runnable `.PRG` (the Ultimate Ripper trick): wrap the located player +
 song data with the SNDH entry-point stubs and a tiny VBL/timer install shim.
 
-## Reference implementations (in `../Atari_ST_Sources`)
+## Reference implementations (third-party, not bundled)
 
-Paths relative to `$HOME/projects/Atari_ST_Sources`:
+Paths relative to the root of a local clone of the public Atari_ST_Sources collection (https://github.com/ggnkua/Atari_ST_Sources; clone it yourself — it is NOT bundled and each file keeps its own author's licence):
 
 - **`ASM/Mcoder/unreleased/MADMAX/DISK/MEGARIP.S`** — 68k "MegaRip": freezes via
   VBL/MFP and captures YM2149 (`$FFFF88xx`) + MFP register writes — a soundchip

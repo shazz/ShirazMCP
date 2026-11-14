@@ -1,14 +1,31 @@
 ---
 name: atari-st-hardware-map
-description: Atari ST(E) hardware and system-variable memory map — the $FFFF82xx–$FFFF8Axx hardware register banks (Shifter, MMU, DMA, PSG, MFP 68901, ACIA, Blitter, STE DMA sound/DSP) and low-memory system variables. Use when annotating an address with its register name/meaning, interpreting reads/writes in a disassembly or memory dump, or building the MCP address→register mapper. Full memory map bundled in reference/.
+description: Atari ST(E) hardware and system-variable memory map — the $FFFF82xx–$FFFF8Axx hardware register banks (Shifter, MMU, DMA, PSG, MFP 68901, ACIA, Blitter, STE DMA sound/DSP) and low-memory system variables. Use when annotating an address with its register name/meaning, interpreting reads/writes in a disassembly or memory dump, or building the MCP address→register mapper..
 ---
 
 # Atari ST(E) memory map & hardware registers
 
+## Step 0: check the reference files
+
+This skill's tables are summaries. For anything beyond them, read the full third-party
+document(s), which are NOT in this repo (licence) and live in your local `refs/` (gitignored):
+  - `refs/skills/atari-st-hardware-map/memory_map.txt`
+
+Before relying on them, run:
+
+    python3 tools/fetch_refs.py --check --skill atari-st-hardware-map
+
+- `ok`: read the file(s) above.
+- `missing` or `mismatch`: run `python3 tools/fetch_refs.py --fetch --skill atari-st-hardware-map` (restores
+  from this repo's git history or the listed source, verified by sha256). If it still reports
+  missing, tell the user which document is missing and where to get it (the script prints the
+  sources), and continue from this skill's summary only: never fill in a table value from memory
+  and present it as coming from the document.
+
 Seed data for the MCP's **address→register annotator**: given any address, return
 its region, register name, and meaning so results carry metadata (e.g.
 `$FF8240 → "Shifter — palette register 0"`). The full labelled map is bundled at
-`reference/memory_map.txt` (1465 lines, from the MJJ project) — the annotator loads
+`src/analyze/memory_map.txt` (the Hollis list, see "Reference" below) — the annotator loads
 and indexes it.
 
 ## Region overview
@@ -46,7 +63,12 @@ and indexes it.
 - Nearby (±small) → "N bytes into <register>".
 - Context-aware for PSG: track the last `$FF8800` select to name the target reg.
 
-## Reference
+## Reference (not bundled in this skill)
 
-- `reference/memory_map.txt` — full ST/STE map with per-address descriptions and
-  bit layouts. The annotator's source of truth; keep it as the parsed dataset.
+- *Atari ST/STe/MSTe/TT/F030 Hardware Register Listing* v7.0 (Dan Hollis, 1994) - the canonical
+  per-address list with bit layouts. Its licence ("may only be copied unmodified, in its entirety,
+  freely, not sold") is NOT MIT; this repo's server embeds a copy at `src/analyze/memory_map.txt`
+  (see the licence note in README). Do not copy it elsewhere.
+- TOS.HYP system variables and BIOS/XBIOS/GEMDOS docs (FreeMiNT project, e.g. freemint.github.io/tos.hyp).
+- Atari Compendium; Hatari source (`src/ioMem*.c`) for what the emulator actually decodes.
+- Not covered here: the ACSI/DMA disk interface - see `atari-st-acsi-hdd`.

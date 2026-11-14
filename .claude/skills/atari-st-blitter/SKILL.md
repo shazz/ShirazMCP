@@ -1,9 +1,27 @@
 ---
 name: atari-st-blitter
-description: Atari ST(E) Blitter (BLiTTER, $FFFF8A00) — register map (source/dest addresses & increments, endmasks, logical & halftone operations, skew/NFSR/FXSR, line/word counts), how block transfers work, and timing. Use when analyzing or interpreting blitter-driven graphics, disassembly touching $FF8Axx, or estimating blit cost. Full Atari BLiTTER manual is bundled in reference/.
+description: Atari ST(E) Blitter (BLiTTER, $FFFF8A00) — register map (source/dest addresses & increments, endmasks, logical & halftone operations, skew/NFSR/FXSR, line/word counts), how block transfers work, and timing. Use when analyzing or interpreting blitter-driven graphics, disassembly touching $FF8Axx, or estimating blit cost..
 ---
 
 # Atari ST(E) Blitter
+
+## Step 0: check the reference files
+
+This skill's tables are summaries. For anything beyond them, read the full third-party
+document(s), which are NOT in this repo (licence) and live in your local `refs/` (gitignored):
+  - `refs/skills/atari-st-blitter/blitter_manual.md`
+  - `refs/skills/atari-st-blitter/blitter_execution_times.md`
+
+Before relying on them, run:
+
+    python3 tools/fetch_refs.py --check --skill atari-st-blitter
+
+- `ok`: read the file(s) above.
+- `missing` or `mismatch`: run `python3 tools/fetch_refs.py --fetch --skill atari-st-blitter` (restores
+  from this repo's git history or the listed source, verified by sha256). If it still reports
+  missing, tell the user which document is missing and where to get it (the script prints the
+  sources), and continue from this skill's summary only: never fill in a table value from memory
+  and present it as coming from the document.
 
 Hardware block-transfer coprocessor at **`$FFFF8A00`** (not present on TT). Moves
 rectangular bit-blocks with per-word masking, a 16-way logic op, bit-shift (skew),
@@ -66,12 +84,16 @@ Poll BUSY or use the MFP "blitter done" interrupt (`$FFFA` GPIP bit 3, vector at
 ## Timing
 
 Roughly **1 bus word / clock** once running, plus per-line and setup overhead;
-FXSR adds a read per line. See `reference/blitter_execution_times.md` for the cost
-table and `reference/blitter_manual.md` for the full official manual (bundled from
-the MJJ project). Use these when the MCP estimates blit cost between breakpoints
-(see the profiler / cycle-counter feature).
+FXSR adds a read per line. Cost per word depends on HOP x LOP: a plain copy (HOP=2, LOP=3)
+runs about 2 NOP-equivalents/word and the cheapest ops (LOP 0, 12, 15) about 1, assuming the
+blitter is the only bus master (rule of thumb from the Atari-Forum wiki timing table - verify with
+`profile` on the real routine). Use these when estimating blit cost between breakpoints.
 
-## Reference files
+## Reference material (not bundled - third-party copyright)
 
-- `reference/blitter_manual.md` — full Atari BLiTTER manual.
-- `reference/blitter_execution_times.md` — timing/cost notes.
+- *Atari BLiTTER manual* (Atari Corp., 1987) - the register/bit-level authority. Find it on the
+  Atari-Forum wiki / atari-wiki.com ("Blitter") or in the Atari Compendium.
+- *The Atari ST(E) BLiTTER in brief* (The Paranoid of Paradox, 2012) - practical FAQ: HOG vs
+  cooperative restart idioms, common mistakes.
+- Atari-Forum wiki "Blitter Execution Times" - the HOP x LOP timing table.
+- See also the `ste-blitter-expert` agent (`.claude/agents/`).

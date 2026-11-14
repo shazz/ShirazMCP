@@ -60,9 +60,9 @@ layout before the bitplane decoder (`atari-st-bitplanes`) will read it correctly
 Degas Elite may store color-cycling metadata after the image in Elite variants;
 plain Degas does not. Not needed for a static rip.
 
-## Reference implementations (in `../Atari_ST_Sources`)
+## Reference implementations (third-party, not bundled)
 
-Paths relative to `$HOME/projects/Atari_ST_Sources`:
+Paths relative to the root of a local clone of the public Atari_ST_Sources collection (https://github.com/ggnkua/Atari_ST_Sources; clone it yourself — it is NOT bundled and each file keeps its own author's licence):
 
 - **`C/Warwick Grigg/C_series.5/DEGAS.C`** — cleanest self-contained **C**: `degashdr_s`
   (res + 16 palette), a put-pixel unpacker handling the **compressed PC formats** with
