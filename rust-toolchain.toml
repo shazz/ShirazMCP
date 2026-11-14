@@ -1,0 +1,5 @@
+[toolchain]
+# Same compiler as CI (.github/workflows/ci.yml) and the crate's rust-version: trybuild
+# snapshots (tests/compile_fail/*.stderr) depend on rustc's exact wording. Bump all three together.
+channel = "1.92.0"
+components = ["rustfmt", "clippy"]
