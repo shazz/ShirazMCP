@@ -76,17 +76,45 @@ The repo ships a usage skill that teaches an agent how to drive the tools:
   you work in this repo.
 - **Global:** copy that folder to `~/.claude/skills/shirazmcp/` to use it from any project.
 
-## Tools (35)
+## Tools (37)
 
 | Group | Tools |
 |---|---|
 | **Lifecycle** | `start` · `stop` · `pause` · `resume` · `status` |
-| **Debug & memory** | `registers` · `read_memory` · `write_memory` · `search_memory` · `screenshot` · `machine_state` · `debug` |
-| **Analyze** | `disasm` · `profile` · `breakpoint` · `state` |
+| **Debug & memory** | `registers` · `read_memory` · `write_memory` · `search_memory` · `screenshot` · `machine_state` · `send_key` · `debug` |
+| **Analyze** | `disasm` · `profile` · `profile_frame` · `breakpoint` · `state` · `symbols` |
 | **Reverse-engineering** | `watch` · `xrefs` · `run_frames` · `cheat_scan` |
 | **Ripper** | `rip` · `list_ripper_plugins` · `extract` · `find_picture` · `identify_music` · `rip_sample` · `bootsector` · `view_memory_as_screen` · `depack` |
 | **Assemble / patch / persist** | `assemble` · `patch` · `save_prg` (`mode=repatch\|snapshot`) |
 | **Audio** | `record_audio` · `spectrogram` · `ym_state` |
+
+### Machine and CPU options of `start`
+
+`start` takes optional, validated machine options; the server builds the Hatari arguments and
+rejects invalid mixes before launch. Unset options pass no flag (the old behaviour is unchanged).
+
+| Parameter | Values |
+|---|---|
+| `machine` | `st` `megast` `ste` `megaste` `tt` `falcon` |
+| `memsize_mb` | ST-RAM, 1-14 (the 24-bit-bus limit) |
+| `tt_ram_mb` | TT-RAM, 0-1024, multiple of 4; tt/falcon only; needs `addr24=false` |
+| `cpu_level` / `fpu` / `cpu_clock` | 0-6 (6 = 68060; needs `addr24=false`) / `none` `68881` `68882` `internal` / 8, 16, 32 |
+| `compatible` `cpu_exact` `mmu` `addr24` | booleans (`mmu` needs `cpu_level` >= 3) |
+| `dsp` / `monitor` | `none` `dummy` `emu` (Falcon only) / `mono` `rgb` `vga` `tv` |
+| `tos_path` (alias `tos`) | TOS image; must exist |
+| `harddrive` (alias `hard_drive_dir`), `gemdos_drive`, `auto_run` | host dir (must exist), drive letter C-Z (default C), program path on that drive (no `..`) |
+
+With `addr24=false` every address tool (`read_memory`, `write_memory`, `watch`, `disasm`, `profile`,
+`breakpoint`, ...) accepts 32-bit addresses such as TT-RAM at `$01000000`; with the default 24-bit
+bus an address above `$FFFFFF` is refused instead of being silently masked by Hatari. `rip`,
+`search_memory` and the snapshot tools scan ST-RAM only; use `read_memory` for TT-RAM. A CT60-like
+Falcon (the "Rift" build):
+
+```json
+{"machine":"falcon","tos_path":"/path/to/tos404.img","memsize_mb":14,"cpu_level":6,"fpu":"internal",
+ "cpu_clock":32,"compatible":false,"cpu_exact":false,"mmu":false,"addr24":false,"tt_ram_mb":256,
+ "dsp":"emu","monitor":"vga","harddrive":"/path/to/rift","gemdos_drive":"c","auto_run":"RIFT.TOS"}
+```
 
 Full behavior, workflows, and gotchas are in the **[shirazmcp skill](.claude/skills/shirazmcp/SKILL.md)**.
 

@@ -232,9 +232,7 @@ mod tests {
     fn detector_zero_ram_is_empty() {
         let zeros = MemImage::new(vec![0u8; 64 * 1024], crate::types::Addr::new(0));
         assert!(RncRegion.scan(&zeros).is_empty());
-        let teaser: Vec<u8> = std::iter::repeat_n([b'R', b'N'], 32 * 1024)
-            .flatten()
-            .collect();
+        let teaser: Vec<u8> = std::iter::repeat_n(*b"RN", 32 * 1024).flatten().collect();
         let mem = MemImage::new(teaser, crate::types::Addr::new(0));
         assert!(RncRegion.scan(&mem).is_empty());
     }

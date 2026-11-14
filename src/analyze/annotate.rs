@@ -40,7 +40,8 @@ pub const PSG_REG_NAMES: [&str; 16] = [
 /// Annotate a bus address. Lookup order (first hit wins): PSG special-case,
 /// the palette-register range, the dataset, the word-register fallback.
 pub fn annotate(addr: Addr, psg: Option<PsgSelect>) -> Option<Annotation> {
-    let a = addr.raw() & 0x00FF_FFFF;
+    // `bus24`, not a blind mask: $01FF8240 (TT-RAM) is not a palette register.
+    let a = Addr::bus24(addr.raw())?;
     psg_annotation(a, psg)
         .or_else(|| palette_annotation(a))
         .or_else(|| map::lookup(a).map(|e| from_map(addr, e.group, e.desc.to_string())))
@@ -94,6 +95,14 @@ fn palette_annotation(a: u32) -> Option<Annotation> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn annotate_32_bit_io_alias_but_not_tt_ram() {
+        let a = annotate(Addr::new(0xFFFF_8240), None).unwrap();
+        assert_eq!(a.detail, "palette register 0");
+        // TT-RAM look-alike must not be taken for the palette register.
+        assert!(annotate(Addr::new(0x01FF_8240), None).is_none());
+    }
 
     #[test]
     fn annotate_palette_zero() {

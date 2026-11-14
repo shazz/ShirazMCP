@@ -9,7 +9,7 @@ mod run;
 pub use any::AnySession;
 pub use run::RunToBreak;
 pub use spawn::HatariConfig as SessionConfig;
-pub use spawn::{HatariConfig, HatariProcess};
+pub use spawn::{HatariConfig, HatariProcess, MachineOptions};
 pub use state::{LiveState, Paused, Running, SessionState, Stopped};
 
 use crate::error::Error;

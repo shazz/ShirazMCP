@@ -69,6 +69,15 @@ mod tests {
     }
 
     #[test]
+    fn memdump_parses_32_bit_address_prefix() {
+        let line = "01000010: CA FE BA BE 00 00 00 00 00 00 00 00 00 00 00 00   ................";
+        assert_eq!(
+            &parse_memdump(line).unwrap()[..4],
+            &[0xCA, 0xFE, 0xBA, 0xBE]
+        );
+    }
+
+    #[test]
     fn memdump_synthetic_nonzero() {
         let line = "00001000: DE AD BE EF 00 00 00 00 00 00 00 00 00 00 00 00   ................";
         let bytes = parse_memdump(line).unwrap();

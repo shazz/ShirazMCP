@@ -42,7 +42,8 @@ impl HatariServer {
         &self,
         Parameters(a): Parameters<WatchArgs>,
     ) -> Result<Json<WatchOutput>, McpError> {
-        let (addr, len) = validate_watch_args(&a)?;
+        let limit = self.session.lock().await.config().bus_limit();
+        let (addr, len) = validate_watch_args(&a, limit)?;
         let timeout_ms = a.timeout_ms.unwrap_or(10_000);
         let mut guard = self.session.lock().await;
         managed::ensure_paused(&mut guard).await.map_err(to_mcp)?;
@@ -55,7 +56,7 @@ impl HatariServer {
     }
 }
 
-fn validate_watch_args(a: &WatchArgs) -> Result<(Addr, u32), McpError> {
+fn validate_watch_args(a: &WatchArgs, limit: u64) -> Result<(Addr, u32), McpError> {
     let addr = parse_addr(&a.addr)?;
     let len = a.len.unwrap_or(2);
     if ![1, 2, 4].contains(&len) {
@@ -67,11 +68,13 @@ fn validate_watch_args(a: &WatchArgs) -> Result<(Addr, u32), McpError> {
             None,
         ));
     }
-    if u64::from(addr.raw()) + u64::from(len) > u64::from(Addr::BUS_LEN) {
-        return Err(McpError::invalid_params(
-            "addr + len exceeds the 24-bit ST bus",
-            None,
-        ));
+    if u64::from(addr.raw()) + u64::from(len) > limit {
+        let msg = if limit == u64::from(Addr::BUS_LEN) {
+            "addr + len exceeds the 24-bit ST bus (addr24=false for 32-bit)"
+        } else {
+            "addr + len exceeds the 32-bit address space"
+        };
+        return Err(McpError::invalid_params(msg, None));
     }
     Ok((addr, len))
 }
@@ -172,5 +175,29 @@ fn writer_out(guess: analyze::WriterGuess) -> WriterOut {
         ops: guess.insn.ops,
         bytes_hex: hex_encode(&guess.insn.bytes),
         exact: guess.references_target,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(addr: &str, len: Option<u32>) -> WatchArgs {
+        WatchArgs {
+            addr: addr.to_string(),
+            len,
+            on: None,
+            timeout_ms: None,
+        }
+    }
+
+    #[test]
+    fn watch_range_follows_the_session_bus() {
+        let st = u64::from(Addr::BUS_LEN);
+        assert!(validate_watch_args(&args("$01000000", Some(4)), st).is_err());
+        let ok = validate_watch_args(&args("$01000000", Some(4)), 1 << 32).unwrap();
+        assert_eq!(ok.0.raw(), 0x0100_0000);
+        let err = validate_watch_args(&args("$FFFFFFFE", Some(4)), 1 << 32).unwrap_err();
+        assert!(err.message.contains("32-bit"));
     }
 }

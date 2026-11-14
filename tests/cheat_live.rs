@@ -38,6 +38,7 @@ fn start_args(memsize_mb: Option<u32>) -> StartArgs {
         harddrive: None,
         machine: None,
         memsize_mb,
+        ..Default::default()
     }
 }
 

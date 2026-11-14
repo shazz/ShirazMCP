@@ -23,8 +23,10 @@ impl Addr {
     }
 
     /// Parse an agent-supplied address: `$FF8240`, `0xFF8240` (case-
-    /// insensitive prefix/digits), or plain decimal `65280`. Rejects values
-    /// >= `BUS_LEN` (24-bit ST bus) and empty/garbage input.
+    /// insensitive prefix/digits), or plain decimal `65280`. Accepts the full
+    /// 32-bit range (TT-RAM / 68060 sessions run with `addr24=false`);
+    /// rejects empty/garbage input. Whether the value fits the SESSION's bus
+    /// is `HatariConfig::check_addr`'s job - this parser has no session.
     pub fn parse(s: &str) -> crate::error::Result<Self> {
         let bad = || crate::error::Error::Parse {
             context: "address".to_string(),
@@ -38,10 +40,23 @@ impl Addr {
             (s, 10)
         };
         let raw = u32::from_str_radix(digits, radix).map_err(|_| bad())?;
-        if raw >= Self::BUS_LEN {
-            return Err(bad());
-        }
         Ok(Self(raw))
+    }
+
+    /// The 24-bit hardware-map key for a raw bus address, or `None` when the
+    /// address is NOT in the ST's 24-bit space: `< BUS_LEN` is itself, and
+    /// `$FF000000+` is the sign-extended 32-bit alias of the top 16 MB
+    /// (`$FFFF8240` == `$FF8240`). Anything between (TT-RAM at `$01000000`+,
+    /// 68060 address space) is NOT an I/O or ROM address - masking it to 24
+    /// bits would mis-annotate `$01FF8240` as a palette register.
+    pub const fn bus24(raw: u32) -> Option<u32> {
+        if raw < Self::BUS_LEN {
+            Some(raw)
+        } else if raw >= 0xFF00_0000 {
+            Some(raw & 0x00FF_FFFF)
+        } else {
+            None
+        }
     }
 }
 
@@ -97,11 +112,18 @@ mod tests {
     }
 
     #[test]
-    fn addr_parse_rejects_wide() {
-        assert!(matches!(
-            Addr::parse("$1000000"),
-            Err(crate::error::Error::Parse { .. })
-        ));
+    fn addr_parse_accepts_32_bit() {
+        assert_eq!(Addr::parse("$1000000").unwrap().raw(), 0x100_0000);
+        assert_eq!(Addr::parse("0xFFFFFFFF").unwrap().raw(), u32::MAX);
+        assert!(Addr::parse("$100000000").is_err());
+    }
+
+    #[test]
+    fn bus24_maps_only_real_24_bit_addresses() {
+        assert_eq!(Addr::bus24(0xFF8240), Some(0xFF8240));
+        assert_eq!(Addr::bus24(0xFFFF_8240), Some(0xFF8240));
+        assert_eq!(Addr::bus24(0x01FF_8240), None); // TT-RAM, not a register
+        assert_eq!(Addr::bus24(0x100_0000), None);
     }
 
     #[test]

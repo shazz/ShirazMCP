@@ -84,7 +84,7 @@ fn resolve_token_addr(s: &str) -> Option<u32> {
     if rest[hex_len..].starts_with(".w") && addr & 0x8000 != 0 {
         addr |= 0xFFFF_0000;
     }
-    Some(addr & 0x00FF_FFFF)
+    Addr::bus24(addr)
 }
 
 /// PSG select tracking across a listing: if an instruction's mnemonic
@@ -145,6 +145,11 @@ pub(crate) fn parse_live_line(line: &str) -> Option<LiveInsn> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn annotate_ops_ignores_tt_ram_absolute() {
+        assert!(annotate_ops("#$777, $01ff8240.l", None).is_empty());
+    }
 
     #[test]
     fn annotate_ops_finds_hardware_addr() {

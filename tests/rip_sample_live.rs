@@ -46,6 +46,7 @@ fn start_args() -> StartArgs {
         harddrive: None,
         machine: Some("ste".to_string()),
         memsize_mb: Some(4),
+        ..Default::default()
     }
 }
 

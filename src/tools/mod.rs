@@ -44,6 +44,7 @@ pub(crate) mod save_prg_wire;
 mod snapshot_capture;
 mod snapshot_prg;
 pub(crate) mod snapshot_wire;
+mod start_args;
 pub mod symbols;
 pub(crate) mod symbols_load;
 pub(crate) mod symbols_wire;
