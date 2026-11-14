@@ -19,11 +19,22 @@ use crate::types::Addr;
 /// need to be, all users are generic.
 pub trait DebugChannel: Send {
     fn debug(&mut self, cmd: &str) -> impl std::future::Future<Output = Result<String>> + Send;
+
+    /// Exclusive top of the bus this channel's machine can address: the ST's
+    /// 24-bit `BUS_LEN` unless the session runs with `addr24=false`
+    /// (32-bit: TT-RAM, 68060). Fakes keep the 24-bit default.
+    fn bus_limit(&self) -> u64 {
+        u64::from(Addr::BUS_LEN)
+    }
 }
 
 impl DebugChannel for HatariProcess {
     async fn debug(&mut self, cmd: &str) -> Result<String> {
         HatariProcess::debug(self, cmd).await
+    }
+
+    fn bus_limit(&self) -> u64 {
+        self.config().bus_limit()
     }
 }
 
@@ -112,7 +123,7 @@ const MEMWRITE_CHUNK_BYTES: usize = 32;
 /// write path (the `write_memory` tool, `patch`) inherits the chunking.
 pub async fn write_bytes(chan: &mut impl DebugChannel, addr: Addr, bytes: &[u8]) -> Result<()> {
     for (i, chunk) in bytes.chunks(MEMWRITE_CHUNK_BYTES).enumerate() {
-        let at = Addr::new(addr.raw() + (i * MEMWRITE_CHUNK_BYTES) as u32);
+        let at = Addr::new(addr.raw().wrapping_add((i * MEMWRITE_CHUNK_BYTES) as u32));
         write_memwrite_line(chan, at, chunk).await?;
     }
     Ok(())

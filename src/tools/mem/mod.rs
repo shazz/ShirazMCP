@@ -43,6 +43,9 @@ impl HatariServer {
         let proc = guard
             .process_mut()
             .ok_or_else(|| wrong_state(name, "running or paused"))?;
+        proc.config()
+            .check_addr(addr, 0)
+            .map_err(|m| McpError::invalid_params(m, None))?;
         let bytes = debug::read_bytes(proc, addr, count as usize)
             .await
             .map_err(to_mcp)?;
@@ -50,7 +53,7 @@ impl HatariServer {
             addr: addr.to_string(),
             count,
             bytes_hex: hex_encode(&bytes),
-            next_addr: Addr::new(addr.raw() + count).to_string(),
+            next_addr: Addr::new(addr.raw().wrapping_add(count)).to_string(),
             annotations: scan::annotations_for(addr, count as usize),
         }))
     }
@@ -76,6 +79,9 @@ impl HatariServer {
         let proc = guard
             .process_mut()
             .ok_or_else(|| wrong_state(name, "running or paused"))?;
+        proc.config()
+            .check_addr(addr, 0)
+            .map_err(|m| McpError::invalid_params(m, None))?;
         debug::write_bytes(proc, addr, &bytes)
             .await
             .map_err(to_mcp)?;

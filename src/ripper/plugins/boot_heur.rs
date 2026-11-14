@@ -127,7 +127,7 @@ fn dest_addr(ops: &str) -> Option<u32> {
     } else {
         addr
     };
-    Some(addr & 0x00FF_FFFF)
+    crate::types::Addr::bus24(addr)
 }
 
 /// Block-copy loop (§5.4): a post-increment `move` plus a `db*` anywhere in

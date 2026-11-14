@@ -2228,3 +2228,11 @@ branch fires for a DATA/BSS symbol) is still accepted rather than skipped;
 the spec's §2.5 wording ("past its section end") only pins the upper
 check, so this is a literal reading, not a deviation — flagged here for
 visibility since it's a corner the live test (§10.2) doesn't exercise.
+
+## 2026-11-14 — ADR-46: `start` machine options and the session-dependent address bus (CT60-like Falcon)
+
+**Status:** accepted
+**Context:** The "Rift" demo's Falcon CT60 build (68060, 32-bit addressing, TT-RAM) ran in Hatari but `start` had no CPU/TT-RAM/DSP options, and every address parser rejected anything >= `$1000000` (ADR-31's 24-bit `BUS_LEN`), while `annotate`/two operand parsers masked addresses to 24 bits.
+**Decision:** (1) `start` gains optional, enum-typed options; `MachineOptions` (`session/spawn/options.rs`) validates the combination (TT-RAM needs tt/falcon + `addr24=false`, cpu_level 6 needs `addr24=false`, DSP Falcon-only, ...) on the FINAL overlaid config and is the only place that builds the Hatari flags; unset options pass no flag so existing calls are byte-identical. ST-RAM stays capped at 14 MB; TT-RAM is a separate 0-1024 (x4) option. (2) `Addr::parse` is now pure 32-bit; the "fits the bus" check moved to where the session is known: `HatariConfig::check_addr` / `DebugChannel::bus_limit` (24-bit unless `addr24=false`), so a default session still REFUSES `$1000000` rather than letting Hatari silently mask it to `$0`. (3) The 24-bit masks became `Addr::bus24`: `$FFFF8240` aliases `$FF8240`, but `$01FF8240` (TT-RAM) is no longer mis-annotated as a palette register. (4) `auto_run` is a path ON the GEMDOS drive (no `..`, no `:` etc.); `tos`/`harddrive` named in a call must exist.
+**Alternatives considered:** leaving parse strict and adding `parse32` (every tool then needs the config; two parsers drift); trusting Hatari to reject bad combos (it silently ignores some).
+**Consequences:** `rip`, `search_memory`, snapshots and basepage discovery still cover ST-RAM only (`ram_len`); a program loaded into TT-RAM is not reachable by `save_prg`/basepage discovery. `symbols` still mirrors Hatari's 24-bit symbol bound.

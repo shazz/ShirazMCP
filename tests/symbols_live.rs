@@ -48,6 +48,7 @@ fn no_args() -> StartArgs {
         harddrive: None,
         machine: None,
         memsize_mb: None,
+        ..Default::default()
     }
 }
 

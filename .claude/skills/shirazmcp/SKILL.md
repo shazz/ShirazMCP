@@ -17,6 +17,7 @@ binary, an X display (`DISPLAY`); `SHIRAZMCP_VASM` for assemble/patch.
 Stopped ──start──▶ Running ⇄ (pause/resume) ⇄ Paused ──stop──▶ Stopped
 ```
 - **`start`** boots and returns when ready (sentinel-synced). **`stop`** always cleans up.
+  Optional machine options (see "CT60-like Falcon" below) are validated before launch.
 - **`pause`** = freeze via debugger-break (CPU parks; memory/registers/screenshot/rip all
   work frozen). Never think "hatari-stop" — it's banned; use `pause`.
 - Most inspection works Running **or** Paused; **freeze first** when several reads must be
@@ -92,6 +93,25 @@ Everything else still takes only `$hex`/decimal.
   `condition`. A register/variable of the same name (`a0`, `pc`, `VBL`, `TEXT`) always
   shadows a symbol.
 - `symbols(action="free")` unloads; the session's own `stop` clears it too.
+
+## Machine options of `start` (CT60-like Falcon)
+`start` params: `machine` (st|megast|ste|megaste|tt|falcon), `memsize_mb` (ST-RAM 1-14 —
+hardware max), `tt_ram_mb` (0-1024, multiple of 4, tt/falcon only, **needs `addr24=false`**),
+`cpu_level` (0-6; 6 = 68060 **needs `addr24=false`**), `fpu` (none|68881|68882|internal),
+`cpu_clock` (8|16|32), `compatible`/`cpu_exact`/`mmu`/`addr24` (bool), `dsp`
+(none|dummy|emu, Falcon only), `monitor` (mono|rgb|vga|tv), `tos_path` (alias `tos`),
+`harddrive` (alias `hard_drive_dir`) + `gemdos_drive` (C-Z) + `auto_run` (program path ON the
+GEMDOS drive, e.g. `RIFT.TOS`; no `..`). Invalid mixes fail with a clear error before Hatari starts.
+```
+start(machine=falcon, tos_path=…/tos404.img, memsize_mb=14, cpu_level=6, fpu=internal,
+      cpu_clock=32, compatible=false, cpu_exact=false, mmu=false, addr24=false,
+      tt_ram_mb=256, dsp=emu, monitor=vga, harddrive=<dir>, gemdos_drive=c, auto_run=RIFT.TOS)
+```
+- With `addr24=false` all address tools take 32-bit addresses (TT-RAM at `$01000000`+;
+  `$FFFF8240` aliases `$FF8240`). On the default 24-bit bus an address > `$FFFFFF` is
+  **refused** (Hatari would silently mask it).
+- `rip`, `search_memory`, `save_prg`, snapshots and basepage discovery cover **ST-RAM only**;
+  read TT-RAM with `read_memory`/`disasm`.
 
 ## Canonical workflows
 - **Boot & look:** `start` → `machine_state` / `screenshot` / `ym_state`.

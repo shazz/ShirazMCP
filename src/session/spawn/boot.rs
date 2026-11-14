@@ -72,6 +72,9 @@ pub(super) fn build_command(
     if let Some(hd) = &config.harddrive {
         cmd.arg("--harddrive").arg(hd);
     }
+    // After --machine/--harddrive: machine selection resets CPU defaults, and
+    // --gemdos-drive/--auto refer to the mounted directory.
+    cmd.args(config.options.to_args(&config.machine.to_ascii_lowercase()));
     cmd.args(["--fast-boot", on_off(config.fast_boot)])
         .args(["--fast-forward", on_off(config.fast_forward)])
         .args(["--confirm-quit", "off"])
@@ -147,4 +150,57 @@ pub(super) async fn confirm_boot(
         "sentinel after evaluate pc",
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session::spawn::options::{Dsp, Fpu, MachineOptions, Monitor};
+
+    fn argv(config: &HatariConfig) -> Vec<String> {
+        let f = || tempfile_stub();
+        let cmd = build_command(config, f(), f());
+        cmd.as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    fn tempfile_stub() -> std::fs::File {
+        std::fs::File::open("/dev/null").unwrap()
+    }
+
+    #[test]
+    fn default_command_line_is_unchanged() {
+        let args = argv(&HatariConfig::default()).join(" ");
+        assert!(args.starts_with("--machine ste --memsize 1 --tos "));
+        for flag in ["--ttram", "--cpulevel", "--addr24", "--dsp", "--auto"] {
+            assert!(!args.contains(flag), "{flag}");
+        }
+    }
+
+    #[test]
+    fn ct60_options_follow_machine_and_harddrive() {
+        let config = HatariConfig {
+            machine: "falcon".into(),
+            memsize_mb: 14,
+            harddrive: Some("/hd".into()),
+            options: MachineOptions {
+                cpu_level: Some(6),
+                fpu: Some(Fpu::Internal),
+                addr24: Some(false),
+                tt_ram_mb: Some(256),
+                dsp: Some(Dsp::Emu),
+                monitor: Some(Monitor::Vga),
+                auto_run: Some("RIFT.TOS".into()),
+                ..Default::default()
+            },
+            ..HatariConfig::default()
+        };
+        let args = argv(&config).join(" ");
+        assert!(args.contains("--harddrive /hd --ttram 256 --cpulevel 6 --fpu internal"));
+        assert!(
+            args.contains("--addr24 off --dsp emu --monitor vga --auto C:\\RIFT.TOS --fast-boot")
+        );
+    }
 }

@@ -27,8 +27,9 @@ use crate::types::Addr;
 ///    `>= BUS_LEN` ⇒ `invalid_params`; unresolved ⇒ `invalid_params` with a
 ///    hint to load a symbol map.
 pub(crate) async fn resolve_addr(chan: &mut impl DebugChannel, s: &str) -> Result<Addr, McpError> {
+    let limit = chan.bus_limit();
     if let Ok(a) = Addr::parse(s) {
-        return Ok(a);
+        return in_bus(a, limit);
     }
     if !is_symbol_candidate(s) {
         return Err(McpError::invalid_params(
@@ -37,9 +38,9 @@ pub(crate) async fn resolve_addr(chan: &mut impl DebugChannel, s: &str) -> Resul
         ));
     }
     match debug::evaluate(chan, s).await {
-        Ok(v) if v < Addr::BUS_LEN => Ok(Addr::new(v)),
+        Ok(v) if u64::from(v) < limit => Ok(Addr::new(v)),
         Ok(v) => Err(McpError::invalid_params(
-            format!("symbol '{s}' = ${v:x} is outside the 24-bit ST bus"),
+            format!("symbol '{s}' = ${v:x} is outside the {}", bus_name(limit)),
             None,
         )),
         Err(_) => Err(McpError::invalid_params(
@@ -52,6 +53,24 @@ pub(crate) async fn resolve_addr(chan: &mut impl DebugChannel, s: &str) -> Resul
             None,
         )),
     }
+}
+
+fn bus_name(limit: u64) -> &'static str {
+    if limit == u64::from(Addr::BUS_LEN) {
+        "24-bit ST bus (start with addr24=false for 32-bit addresses)"
+    } else {
+        "32-bit address space"
+    }
+}
+
+/// A parsed numeric address must fit the session's bus (24-bit unless
+/// `addr24=false`): Hatari would otherwise silently MASK it to 24 bits.
+fn in_bus(a: Addr, limit: u64) -> Result<Addr, McpError> {
+    if u64::from(a.raw()) >= limit {
+        let msg = format!("{a} is outside the {}", bus_name(limit));
+        return Err(McpError::invalid_params(msg, None));
+    }
+    Ok(a)
 }
 
 /// `resolve_addr` + the disasm even-address gate (same message as the old
@@ -94,6 +113,18 @@ mod tests {
     struct Fake {
         responses: Vec<Result<String>>,
         sent: Vec<String>,
+    }
+
+    /// A 32-bit session (`addr24=false`): the channel reports a 4 GiB bus.
+    struct Wide(Fake);
+
+    impl DebugChannel for Wide {
+        async fn debug(&mut self, cmd: &str) -> Result<String> {
+            self.0.debug(cmd).await
+        }
+        fn bus_limit(&self) -> u64 {
+            1 << 32
+        }
     }
 
     impl DebugChannel for Fake {
@@ -196,6 +227,31 @@ mod tests {
         };
         let err = resolve_addr(&mut fake, "TooFar").await.unwrap_err();
         assert!(err.message.contains("outside the 24-bit ST bus"));
+    }
+
+    #[tokio::test]
+    async fn numeric_beyond_24_bit_is_rejected_on_st_bus() {
+        let mut fake = Fake {
+            responses: vec![],
+            sent: vec![],
+        };
+        let err = resolve_addr(&mut fake, "$1000000").await.unwrap_err();
+        assert!(err.message.contains("24-bit ST bus"));
+        assert!(fake.sent.is_empty());
+    }
+
+    #[tokio::test]
+    async fn tt_ram_address_and_symbol_resolve_on_wide_bus() {
+        let mut wide = Wide(Fake {
+            responses: vec![evaluate_ok(0x0140_0000)],
+            sent: vec![],
+        });
+        let a = resolve_addr(&mut wide, "$01000000").await.unwrap();
+        assert_eq!(a, Addr::new(0x0100_0000));
+        let s = resolve_addr(&mut wide, "TtLabel").await.unwrap();
+        assert_eq!(s, Addr::new(0x0140_0000));
+        let top = resolve_addr(&mut wide, "$FFFFFFFE").await.unwrap();
+        assert_eq!(top.raw(), 0xFFFF_FFFE);
     }
 
     #[tokio::test]

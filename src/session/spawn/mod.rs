@@ -12,7 +12,10 @@ use crate::session::fifo::{self, LogTail, HATARI_DEBUG_PREFIX};
 
 mod boot;
 mod control;
+pub mod options;
 mod recover;
+
+pub use self::options::MachineOptions;
 
 /// How to launch Hatari. Defaults reproduce the DEBUG.md reference
 /// invocation for the MJJ demo (this is a local, single-user tool —
@@ -25,6 +28,8 @@ pub struct HatariConfig {
     pub harddrive: Option<PathBuf>,
     pub machine: String,
     pub memsize_mb: u32,
+    /// CPU/TT-RAM/DSP/monitor/GEMDOS launch options (all `None` = legacy).
+    pub options: MachineOptions,
     pub fast_boot: bool,
     pub fast_forward: bool,
     pub work_dir: PathBuf,
@@ -48,6 +53,7 @@ impl Default for HatariConfig {
             harddrive: None,
             machine: "ste".to_string(),
             memsize_mb: 1,
+            options: MachineOptions::default(),
             fast_boot: true,
             fast_forward: true,
             work_dir: PathBuf::from("/tmp/shiraz-mcp"),

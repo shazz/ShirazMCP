@@ -1,28 +1,12 @@
-use std::path::PathBuf;
-
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::{tool, tool_router, ErrorData as McpError};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
+use super::start_args::overlay_config;
+pub use super::start_args::StartArgs;
 use super::{to_mcp, wrong_state, HatariServer};
-use crate::session::{AnySession, HatariConfig, HatariProcess, Session, Stopped};
-
-/// `start` — input. Every field optional; `None` → `HatariConfig::default()`
-/// value.
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct StartArgs {
-    /// Path to the hatari binary.
-    pub hatari_path: Option<String>,
-    /// TOS ROM image path.
-    pub tos_path: Option<String>,
-    /// Directory to mount as GEMDOS drive C: (TOS auto-runs its AUTO/*.PRG).
-    pub harddrive: Option<String>,
-    /// "st" | "ste" | "megaste" | "tt" | "falcon".
-    pub machine: Option<String>,
-    /// RAM size in MiB (1-14).
-    pub memsize_mb: Option<u32>,
-}
+use crate::session::{AnySession, HatariProcess, Session, Stopped};
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct StartOutput {
@@ -35,20 +19,6 @@ pub struct StartOutput {
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct StateOutput {
     pub state: String,
-}
-
-fn overlay_config(base: HatariConfig, args: StartArgs) -> HatariConfig {
-    HatariConfig {
-        hatari_path: args
-            .hatari_path
-            .map(PathBuf::from)
-            .unwrap_or(base.hatari_path),
-        tos_path: args.tos_path.map(PathBuf::from).unwrap_or(base.tos_path),
-        harddrive: args.harddrive.map(PathBuf::from).or(base.harddrive),
-        machine: args.machine.unwrap_or(base.machine),
-        memsize_mb: args.memsize_mb.unwrap_or(base.memsize_mb),
-        ..base
-    }
 }
 
 fn start_output(proc: &HatariProcess) -> StartOutput {
@@ -69,14 +39,19 @@ impl HatariServer {
         description = "Boot Hatari (Atari ST emulator). Returns once the \
                        debugger control plane answers (sentinel-gated; no \
                        fixed sleeps). Fails if a session is already running \
-                       or paused."
+                       or paused. Optional machine/CPU options (cpu_level, \
+                       fpu, cpu_clock, addr24, tt_ram_mb, dsp, monitor, \
+                       gemdos_drive, auto_run...) are validated before \
+                       launch; a CT60-like Falcon is machine=falcon, \
+                       cpu_level=6, fpu=internal, addr24=false, tt_ram_mb=\
+                       256, dsp=emu."
     )]
     pub async fn start(
         &self,
         Parameters(args): Parameters<StartArgs>,
     ) -> Result<Json<StartOutput>, McpError> {
         let mut guard = self.session.lock().await;
-        let config = overlay_config(guard.config().clone(), args);
+        let config = overlay_config(guard.config().clone(), args)?;
         let placeholder = AnySession::new(config.clone());
         match std::mem::replace(&mut *guard, placeholder) {
             // WHY: `s` (the session `mem::replace` pulled out) still carries
@@ -244,13 +219,7 @@ mod tests {
     use crate::session::HatariConfig;
 
     fn no_override_args() -> StartArgs {
-        StartArgs {
-            hatari_path: None,
-            tos_path: None,
-            harddrive: None,
-            machine: None,
-            memsize_mb: None,
-        }
+        StartArgs::default()
     }
 
     /// Regression for the bug this fix addresses: `start` computed an
