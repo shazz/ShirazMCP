@@ -34,6 +34,7 @@ pub async fn profile_save(chan: &mut impl DebugChannel, path: &Path) -> Result<(
         .debug(&format!("profile save {}", path.display()))
         .await?;
     if out.contains("CPU addresses.") {
+        console_fallback(path, &out)?;
         Ok(())
     } else {
         Err(Error::Parse {
@@ -41,6 +42,21 @@ pub async fn profile_save(chan: &mut impl DebugChannel, path: &Path) -> Result<(
             input: out,
         })
     }
+}
+
+/// Hatari 2.6 quirk (seen repeatedly on the GP500 project, local patch): the
+/// `profile save` FILE can contain only headers and `[...]` placeholders while
+/// the per-address dump is echoed on the debugger console. If the file has no
+/// data lines but the console output does, persist the console copy so every
+/// caller (profile_frame, profile) parses real data instead of zeros.
+fn console_fallback(path: &Path, out: &str) -> Result<()> {
+    let file_has_data = std::fs::read_to_string(path)
+        .map(|c| !parse_profile_file(&c).is_empty())
+        .unwrap_or(false);
+    if !file_has_data && !parse_profile_file(out).is_empty() {
+        std::fs::write(path, out).map_err(Error::Io)?;
+    }
+    Ok(())
 }
 
 fn confirm(out: String, needle: &str, context: &str) -> Result<()> {
@@ -124,6 +140,28 @@ mod tests {
     }
 
     const FIXTURE: &str = include_str!("../../tests/fixtures/hatari_profile.txt");
+
+    #[test]
+    fn console_fallback_rewrites_stub_file_only() {
+        let dir = std::env::temp_dir().join(format!("shiraz-fb-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let stub = dir.join("stub.txt");
+        std::fs::write(&stub, "Hatari profile\n[...]\n[...]\n").unwrap();
+        // stub file + console with data -> file replaced by the console dump
+        console_fallback(&stub, FIXTURE).unwrap();
+        let got = std::fs::read_to_string(&stub).unwrap();
+        assert!(!parse_profile_file(&got).is_empty());
+        // file with data is never overwritten, even if the console has none
+        let good = dir.join("good.txt");
+        std::fs::write(&good, FIXTURE).unwrap();
+        console_fallback(&good, "Disassembled 0 CPU addresses.").unwrap();
+        assert_eq!(std::fs::read_to_string(&good).unwrap(), FIXTURE);
+        // stub file + console without data -> left alone (error surfaces as zeros, as before)
+        let stub2 = dir.join("stub2.txt");
+        std::fs::write(&stub2, "[...]\n").unwrap();
+        console_fallback(&stub2, "Disassembled 0 CPU addresses.").unwrap();
+        assert_eq!(std::fs::read_to_string(&stub2).unwrap(), "[...]\n");
+    }
 
     #[tokio::test]
     async fn profile_on_off_save_parse_confirmations() {

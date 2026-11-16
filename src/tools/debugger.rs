@@ -143,6 +143,16 @@ impl HatariServer {
     }
 }
 
+/// Local patch: session-unique screenshot names (the per-process counter
+/// restarts at 0000 every server start, so files from earlier sessions or a
+/// parallel worker were silently overwritten / confused).
+fn unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 async fn take_screenshot(
     proc: &mut HatariProcess,
     shot_seq: &std::sync::atomic::AtomicU64,
@@ -151,7 +161,7 @@ async fn take_screenshot(
     let path = proc
         .config()
         .work_dir
-        .join(format!("screenshot-{n:04}.png"));
+        .join(format!("screenshot-{}-{n:04}.png", unix_secs()));
     debug::screenshot(proc, &path).await.map_err(to_mcp)?;
     let bytes = tokio::fs::read(&path)
         .await

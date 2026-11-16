@@ -55,8 +55,10 @@ impl Default for HatariConfig {
             memsize_mb: 1,
             options: MachineOptions::default(),
             fast_boot: true,
-            fast_forward: true,
-            work_dir: PathBuf::from("/tmp/shiraz-mcp"),
+            fast_forward: std::env::var("SHIRAZMCP_FAST_FORWARD")
+                .map(|v| v != "0" && v != "off")
+                .unwrap_or(true),
+            work_dir: env_path("SHIRAZMCP_WORKDIR", "/tmp/shiraz-mcp"),
             sentinel_timeout_ms: 10_000,
             boot_timeout_ms: 15_000,
         }
