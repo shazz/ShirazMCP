@@ -129,17 +129,22 @@ pub(crate) fn parse_list(out: &str) -> Result<Vec<BreakpointEntry>> {
         .collect())
 }
 
-/// Extract the fired expression (with options) from a debugger-entry
-/// block (§3.2): the TAB-indented line following
-/// "… breakpoint condition(s) matched …". None if no match line present.
-pub(crate) fn fired_expression(entry_output: &str) -> Option<String> {
+/// Every matched expression (with options) in a run's output (§3.2): the
+/// TAB-indented line following each "… breakpoint condition(s) matched …"
+/// header, in log order. Plural since ADR-47: `:trace` breakpoints print
+/// the same header on every hit WITHOUT stopping, so the breakpoint that
+/// actually froze the machine is not necessarily the first one reported.
+pub(crate) fn fired_expressions(entry_output: &str) -> Vec<String> {
+    let mut found = Vec::new();
     let mut lines = entry_output.lines();
     while let Some(line) = lines.next() {
         if line.contains("breakpoint condition(s) matched") {
-            return lines.next().map(|l| l.trim().to_string());
+            if let Some(expr) = lines.next() {
+                found.push(expr.trim().to_string());
+            }
         }
     }
-    None
+    found
 }
 
 #[cfg(test)]
@@ -246,15 +251,25 @@ mod tests {
     }
 
     #[test]
-    fn fired_expression_extracts() {
-        assert_eq!(
-            fired_expression(FIRE_BLOCK),
-            Some("pc > 0 :once".to_string())
-        );
+    fn fired_expressions_extracts() {
+        assert_eq!(fired_expressions(FIRE_BLOCK), vec!["pc > 0 :once"]);
     }
 
     #[test]
-    fn fired_expression_none_when_absent() {
-        assert_eq!(fired_expression("nothing interesting here"), None);
+    fn fired_expressions_empty_when_absent() {
+        assert!(fired_expressions("nothing interesting here").is_empty());
+    }
+
+    /// ADR-47: trace hits precede the stopping `:once` report — the
+    /// managed run must still recognise its own breakpoint.
+    #[test]
+    fn fired_expressions_lists_trace_hits_then_stop() {
+        let out = format!(
+            "2. CPU breakpoint condition(s) matched 1 times.\n\tpc = $1234 :trace\n{FIRE_BLOCK}"
+        );
+        assert_eq!(
+            fired_expressions(&out),
+            vec!["pc = $1234 :trace", "pc > 0 :once"]
+        );
     }
 }

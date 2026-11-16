@@ -13,6 +13,8 @@ pub(crate) mod breakpoint_wire;
 pub mod cheat;
 pub(crate) mod cheat_out;
 pub(crate) mod cheat_wire;
+pub mod count_hits;
+pub(crate) mod count_hits_wire;
 pub mod debugger;
 pub mod depack;
 pub mod extract;
@@ -21,6 +23,8 @@ pub mod input;
 pub(crate) mod input_wire;
 pub mod profile_frame;
 pub(crate) mod profile_frame_wire;
+pub mod profile_raw;
+pub(crate) mod profile_raw_wire;
 pub(crate) mod profile_wire;
 // `InsnOut` + the shared instruction-mapping helper, split out of
 // `analyze_wire.rs` (§7.2 fallback, P8) — used by `disasm` and `patch` readback.
@@ -41,6 +45,9 @@ pub(crate) mod rip_sample_wire;
 pub(crate) mod rip_wire;
 pub mod save_prg;
 pub(crate) mod save_prg_wire;
+pub mod set_registers;
+pub(crate) mod set_registers_sr;
+pub(crate) mod set_registers_wire;
 mod snapshot_capture;
 mod snapshot_prg;
 pub(crate) mod snapshot_wire;
@@ -141,6 +148,9 @@ impl HatariServer {
             + Self::analyze_router()
             + Self::profile_router()
             + Self::profile_frame_router()
+            + Self::profile_raw_router()
+            + Self::count_hits_router()
+            + Self::set_registers_router()
             + Self::breakpoint_router()
             + Self::bootsector_router()
             + Self::assemble_router()
@@ -166,7 +176,9 @@ impl ServerHandler for HatariServer {
             .with_instructions(
                 "Drives the Hatari Atari ST emulator. Lifecycle: \
                  start/stop/pause/resume/status. Debug: debug (raw debugger \
-                 command), registers, screenshot. Memory: \
+                 command), registers, set_registers (write D/A/USP/ISP/SR/PC \
+                 atomically, mode-safe for both stack pointers; read back + \
+                 ok flag), screenshot. Memory: \
                  read_memory/write_memory/search_memory (hardware addresses \
                  come back annotated). Rip: rip (scan a RAM snapshot for \
                  artifacts — returns compact findings), find_picture (rip, \
@@ -190,7 +202,11 @@ impl ServerHandler for HatariServer {
                  raster budget), profile_frame (per-frame measured cycles \
                  over N whole VBL frames — min/avg/max + 50Hz fit + \
                  headroom; from/to are an address FILTER for 'your code', \
-                 not a measurement window), breakpoint (managed one-shot \
+                 not a measurement window), profile_raw (ONE profiler window \
+                 over N frames, summarised: totals vs N×160256, RAM/TOS/cart \
+                 split, named ranges with entry_hits, top-N hot addresses), \
+                 count_hits (exact per-PC execution counts over N frames via \
+                 :trace breakpoints + hits/frame and Hz), breakpoint (managed one-shot \
                  run-to-break), state (save/load emulator snapshots). \
                  Status: machine_state \
                  (one-call frozen snapshot — CPU registers + SR flags, \

@@ -523,7 +523,18 @@ arm time) `breakpoint`'s arm-failure hint; the other ~12 address-taking
 tools are untouched. Listing (`action=list`) is served entirely from a
 Rust-side mirror (`symbols_wire::SymbolStore`) rebuilt from the same file
 Hatari read, because Hatari's own `symbols name|code|data` is unusable over
-either control plane (see the `debug/` section above).
+either control plane (see the `debug/` section above). ADR-47 adds three
+tools that replace hand-scraping `hatari.log`. `profile_raw` reuses
+`profile_frame`'s generalised `frames_leg` with one N-frame profiler window
+and pure aggregation in `profile_raw_wire.rs`. `count_hits` arms one
+`:trace` breakpoint per PC (`debug::trace`), runs one managed N-frame leg
+and reads Hatari's cumulative "matched N times" counter from the run's
+output. Because trace hits print the same header without stopping,
+`managed.rs` now checks that its `:once` expression is *among* the matched
+blocks rather than the first one. `set_registers` writes registers through
+`debug::setreg` (`r reg=$value`) in an order computed by the pure
+`set_registers_wire::plan_writes`: each stack pointer goes through A7 while
+it is the active one, relying only on SR banking.
 
 ## Data Flow
 
