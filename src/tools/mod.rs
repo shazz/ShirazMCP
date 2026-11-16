@@ -46,6 +46,7 @@ pub(crate) mod rip_wire;
 pub mod save_prg;
 pub(crate) mod save_prg_wire;
 pub mod set_registers;
+pub(crate) mod set_registers_sr;
 pub(crate) mod set_registers_wire;
 mod snapshot_capture;
 mod snapshot_prg;

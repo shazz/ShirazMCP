@@ -1,4 +1,5 @@
-//! ADR-47 live smoke for `profile_raw`, `count_hits` and `set_registers`,
+//! ADR-47 live smoke for `profile_raw`, `count_hits` and `set_registers`
+//! (incl. a set PC being where the next managed run starts),
 //! driven through the PUBLIC tool surface against a bare TOS desktop (no
 //! hard drive needed). `#[ignore]`d; run with e.g.
 //! `SHIRAZMCP_HATARI=/opt/homebrew/bin/hatari SHIRAZMCP_TOS=/path/tos162uk.img
@@ -14,6 +15,7 @@ use rmcp::handler::server::wrapper::{Json, Parameters};
 
 use shiraz_mcp::session::HatariConfig;
 use shiraz_mcp::tools::count_hits::CountHitsArgs;
+use shiraz_mcp::tools::debugger::DebugArgs;
 use shiraz_mcp::tools::frames::RunFramesArgs;
 use shiraz_mcp::tools::lifecycle::StartArgs;
 use shiraz_mcp::tools::profile_raw::{ProfileRawArgs, RangeArg};
@@ -132,6 +134,78 @@ async fn smoke_set_registers(server: &HatariServer) {
     assert!(o.ok, "restore not applied: {:?}", o.not_applied);
 }
 
+async fn dbg(server: &HatariServer, cmd: &str) -> String {
+    let Json(o) = server
+        .debug(Parameters(DebugArgs {
+            cmd: cmd.into(),
+            timeout_ms: None,
+        }))
+        .await
+        .unwrap();
+    o.output
+}
+
+/// A PC written by set_registers is where the next managed run starts:
+/// a counter loop at $40000 (`addq.l #1,$40010.l; bra.s *-6`) at IPL 7
+/// must have run after run_frames 1, and PC must still be in the loop.
+/// Then the 68000 SR mask: $B300 reads back $A300, reported ok + notes.
+async fn smoke_pc_takes(server: &HatariServer) {
+    let Json(orig) = server.registers().await.unwrap();
+    dbg(
+        server,
+        "w $40000 $52 $b9 $00 $04 $00 $10 $60 $f8 0 0 0 0 0 0 0 0",
+    )
+    .await;
+    let Json(o) = server
+        .set_registers(Parameters(SetRegistersArgs {
+            pc: Some(0x4_0000),
+            sr: Some(0x2700),
+            ..Default::default()
+        }))
+        .await
+        .unwrap();
+    assert!(
+        o.ok && o.notes.is_empty(),
+        "{:?} {:?}",
+        o.not_applied,
+        o.notes
+    );
+    let Json(r) = server
+        .run_frames(Parameters(RunFramesArgs {
+            frames: 1,
+            timeout_ms: None,
+        }))
+        .await
+        .unwrap();
+    let pc = parse_hex(&r.pc.unwrap());
+    assert!(
+        (0x4_0000..0x4_0008).contains(&pc),
+        "pc ${pc:x} left the loop"
+    );
+    let cnt = dbg(server, "m $40010 4").await;
+    println!("counter after 1 frame: {cnt}");
+    assert!(!cnt.contains("00 00 00 00"), "loop never ran: {cnt}");
+
+    let Json(o) = server
+        .set_registers(Parameters(SetRegistersArgs {
+            sr: Some(0xB300),
+            ..Default::default()
+        }))
+        .await
+        .unwrap();
+    println!("sr $B300: {}", serde_json::to_string_pretty(&o).unwrap());
+    assert!(o.ok, "{:?}", o.not_applied);
+    assert_eq!(o.sr_raw, "$A300");
+    assert_eq!(o.notes.len(), 2, "{:?}", o.notes);
+    let restore = SetRegistersArgs {
+        pc: Some(parse_hex(&orig.pc)),
+        sr: Some(sr_word(&orig.sr)),
+        ..Default::default()
+    };
+    let Json(o) = server.set_registers(Parameters(restore)).await.unwrap();
+    assert!(o.ok, "restore not applied: {:?}", o.not_applied);
+}
+
 #[tokio::test]
 #[ignore = "needs hatari + a TOS image (SHIRAZMCP_HATARI/SHIRAZMCP_TOS)"]
 async fn raw_tools_smoke() {
@@ -139,5 +213,6 @@ async fn raw_tools_smoke() {
     boot(&server).await;
     smoke_profile_and_count(&server).await;
     smoke_set_registers(&server).await;
+    smoke_pc_takes(&server).await;
     server.stop().await.unwrap();
 }

@@ -44,6 +44,9 @@ pub struct SetRegistersArgs {
     pub isp: Option<u32>,
     /// Full 16-bit status register (decimal JSON number, e.g. 9984 =
     /// $2700). Its S bit decides which stack pointer A7 ends up aliasing.
+    /// Bits the CPU lacks are dropped (68000: 14 and 12, so $B300 reads
+    /// $A300) and noted; a set trace bit (15) makes the CPU leave pc after
+    /// one instruction on resume.
     pub sr: Option<u16>,
     /// Program counter (must be even). Written last.
     pub pc: Option<u32>,
@@ -51,10 +54,14 @@ pub struct SetRegistersArgs {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct SetRegistersOutput {
-    /// true iff every requested field read back with the requested value.
+    /// true iff every requested field read back with the requested value
+    /// (SR compared under the CPU's implemented-bit mask; see `notes`).
     pub ok: bool,
     /// Requested fields that did not take, "name: wanted $X, got $Y".
     pub not_applied: Vec<String>,
+    /// Caveats that are not failures: SR bits this CPU dropped, a set
+    /// trace bit.
+    pub notes: Vec<String>,
     /// The exact `r reg=value` debugger commands sent, in order.
     pub writes: Vec<String>,
     /// Registers read back after the writes.
@@ -194,8 +201,14 @@ fn push_some(w: &mut Vec<RegWrite>, names: &[&'static str], values: &[Option<u32
     }
 }
 
-/// Requested fields whose read-back value differs (pure).
-pub(crate) fn mismatches(a: &SetRegistersArgs, got: &Registers, got_sr: u16) -> Vec<String> {
+/// Requested fields whose read-back value differs (pure). SR is compared
+/// under `sr_mask` (the bits this CPU implements, `set_registers_sr`).
+pub(crate) fn mismatches(
+    a: &SetRegistersArgs,
+    got: &Registers,
+    got_sr: u16,
+    sr_mask: u16,
+) -> Vec<String> {
     let mut out = Vec::new();
     let mut check = |name: &str, want: Option<u32>, have: u32| {
         if let Some(w) = want.filter(|w| *w != have) {
@@ -210,7 +223,11 @@ pub(crate) fn mismatches(a: &SetRegistersArgs, got: &Registers, got_sr: u16) -> 
     }
     check("usp", a.usp, got.usp);
     check("isp", a.isp, got.isp);
-    check("sr", a.sr.map(u32::from), u32::from(got_sr));
+    check(
+        "sr",
+        a.sr.map(|s| u32::from(s & sr_mask)),
+        u32::from(got_sr),
+    );
     check("pc", a.pc, got.pc.raw());
     out
 }
@@ -220,6 +237,8 @@ mod tests {
     use super::*;
     use crate::debug::SrFlags;
     use crate::types::Addr;
+
+    const M: u16 = crate::tools::set_registers_sr::SR_MASK_68000;
 
     fn cmds(w: &[RegWrite]) -> Vec<String> {
         w.iter().map(RegWrite::command).collect()
@@ -332,9 +351,9 @@ mod tests {
             sr: Some(0x2700),
             ..Default::default()
         };
-        assert!(mismatches(&a, &regs(), 0x2700).len() == 1);
+        assert!(mismatches(&a, &regs(), 0x2700, M).len() == 1);
         assert_eq!(
-            mismatches(&a, &regs(), 0x2300),
+            mismatches(&a, &regs(), 0x2300, M),
             vec![
                 "isp: wanted $3000, got $2000",
                 "sr: wanted $2700, got $2300"
@@ -342,11 +361,31 @@ mod tests {
         );
     }
 
+    /// 68000 drops SR bit 12: $B300 -> $A300 is applied, not a mismatch;
+    /// a real difference under the mask still is.
+    #[test]
+    fn sr_compared_under_cpu_mask() {
+        let a = SetRegistersArgs {
+            sr: Some(0xB300),
+            ..Default::default()
+        };
+        assert!(mismatches(&a, &regs(), 0xA300, M).is_empty());
+        assert_eq!(
+            mismatches(&a, &regs(), 0x2300, M),
+            vec!["sr: wanted $a300, got $2300"]
+        );
+        let m020 = crate::tools::set_registers_sr::SR_MASK_68020;
+        assert_eq!(
+            mismatches(&a, &regs(), 0xA300, m020),
+            vec!["sr: wanted $b300, got $a300"]
+        );
+    }
+
     #[test]
     fn snapshot_round_trips_through_plan() {
         let r = regs();
         let back = SetRegistersArgs::from_snapshot(&r, 0x2700);
-        assert!(mismatches(&back, &r, 0x2700).is_empty());
+        assert!(mismatches(&back, &r, 0x2700, M).is_empty());
         let plan = cmds(&plan_writes(&back, 0x2700));
         // Supervisor snapshot: USP via the S=0 detour, ISP after, PC last.
         assert_eq!(
