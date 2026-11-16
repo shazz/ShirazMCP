@@ -110,7 +110,7 @@ async fn make_dump_dir(guard: &mut AnySession, seq: u64) -> Result<std::path::Pa
 
 /// Hard error on failure (§7): profiling left enabled would silently slow
 /// the session, so this is not best-effort like `cleanup_profile`.
-async fn finish_profiling(guard: &mut AnySession) -> Result<(), McpError> {
+pub(super) async fn finish_profiling(guard: &mut AnySession) -> Result<(), McpError> {
     debug::profile::profile_off(live_proc(guard)?)
         .await
         .map_err(|e| {
@@ -124,30 +124,41 @@ async fn finish_profiling(guard: &mut AnySession) -> Result<(), McpError> {
         })
 }
 
-fn live_proc(guard: &mut AnySession) -> Result<&mut HatariProcess, McpError> {
+pub(super) fn live_proc(guard: &mut AnySession) -> Result<&mut HatariProcess, McpError> {
     guard
         .process_mut()
         .ok_or_else(|| McpError::internal_error("session lost its process mid-profile", None))
 }
 
-/// Run exactly one VBL frame via the managed primitive. Errors unless OUR
-/// breakpoint fired AND the VBL counter advanced by exactly 1 (frame
-/// isolation would otherwise be lost).
 async fn one_frame_leg(guard: &mut AnySession, timeout_ms: u64) -> Result<(), McpError> {
+    frames_leg(guard, 1, timeout_ms).await.map(|_| ())
+}
+
+/// Run exactly `n` VBL frames via the managed primitive (shared with
+/// `profile_raw`/`count_hits`, ADR-47). Errors unless OUR breakpoint fired
+/// AND the VBL counter advanced by exactly `n` (frame isolation would
+/// otherwise be lost). Returns the run's log output (trace hits, …).
+pub(super) async fn frames_leg(
+    guard: &mut AnySession,
+    n: u32,
+    timeout_ms: u64,
+) -> Result<String, McpError> {
     let cur = frames::current_vbl(guard).await?;
-    let condition = frames::vbl_condition(cur, 1);
+    let condition = frames::vbl_condition(cur, n);
     match managed::run_to_breakpoint(guard, &condition, timeout_ms)
         .await
         .map_err(to_mcp)?
     {
-        Fire::Fired { ours: true, .. } => {
+        Fire::Fired {
+            ours: true, output, ..
+        } => {
             let after = frames::current_vbl(guard).await?;
             let delta = after.wrapping_sub(cur);
-            if delta == 1 {
-                Ok(())
+            if delta == n {
+                Ok(output)
             } else {
                 Err(McpError::internal_error(
-                    format!("VBL advanced by {delta} (expected 1) — frame isolation lost"),
+                    format!("VBL advanced by {delta} (expected {n}) — frame isolation lost"),
                     None,
                 ))
             }
@@ -171,7 +182,7 @@ async fn one_frame_leg(guard: &mut AnySession, timeout_ms: u64) -> Result<(), Mc
 /// Best-effort profiler disable on an error path; never masks the original
 /// error (after `TimedOut` the session is Running — the attempt may fail;
 /// acceptable, matching `run_profile`'s precedent).
-async fn cleanup_profile(guard: &mut AnySession) {
+pub(super) async fn cleanup_profile(guard: &mut AnySession) {
     if let Some(proc) = guard.process_mut() {
         let _ = debug::profile::profile_off(proc).await;
     }

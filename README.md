@@ -76,17 +76,27 @@ The repo ships a usage skill that teaches an agent how to drive the tools:
   you work in this repo.
 - **Global:** copy that folder to `~/.claude/skills/shirazmcp/` to use it from any project.
 
-## Tools (37)
+## Tools (41)
 
 | Group | Tools |
 |---|---|
 | **Lifecycle** | `start` · `stop` · `pause` · `resume` · `status` |
-| **Debug & memory** | `registers` · `read_memory` · `write_memory` · `search_memory` · `screenshot` · `machine_state` · `send_key` · `debug` |
-| **Analyze** | `disasm` · `profile` · `profile_frame` · `breakpoint` · `state` · `symbols` |
+| **Debug & memory** | `registers` · `set_registers` · `read_memory` · `write_memory` · `search_memory` · `screenshot` · `machine_state` · `send_key` · `debug` |
+| **Analyze** | `disasm` · `profile` · `profile_frame` · `profile_raw` · `count_hits` · `breakpoint` · `state` · `symbols` |
 | **Reverse-engineering** | `watch` · `xrefs` · `run_frames` · `cheat_scan` |
 | **Ripper** | `rip` · `list_ripper_plugins` · `extract` · `find_picture` · `identify_music` · `rip_sample` · `bootsector` · `view_memory_as_screen` · `depack` |
 | **Assemble / patch / persist** | `assemble` · `patch` · `save_prg` (`mode=repatch\|snapshot`) |
 | **Audio** | `record_audio` · `spectrogram` · `ym_state` |
+
+### Profiling, hit counts and register writes
+
+These three replace scraping `hatari.log` by hand:
+
+| Tool | What it does |
+|---|---|
+| `profile_raw(frames, ranges?, top?)` | Runs N whole VBL frames under one profiler window. Returns total cycles and instructions against the expected `frames × 160256` (with a coverage ratio), a split by region (ST-RAM, TOS ROM `$E00000-$E40000`, cartridge, other), per named range `{name, from, to}` its cycles, % and `entry_hits`, and the top-N hottest addresses. The raw dump stays on disk. An empty dump is an error, never zeros. |
+| `count_hits(pcs, frames)` | Counts exact executions of 1-16 PCs over N frames, using one `:trace` breakpoint each. The count comes from Hatari's own "matched N times" counter, so breakpoint echoes and listings are not counted. Returns `hits`, `hits_per_frame` and `rate_hz`, plus the VBL delta. Its breakpoints are removed afterwards and your own are left in place. |
+| `set_registers(d0..d7, a0..a6, usp, isp, sr, pc)` | Writes registers while paused and reads them back (`ok` plus `not_applied`). A7 aliases USP or ISP depending on the S bit, so each stack pointer is written through A7 while it is the active one. Both end up as requested whatever the starting or final mode. A failed write rolls everything back. |
 
 ### Machine and CPU options of `start`
 

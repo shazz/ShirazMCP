@@ -59,7 +59,9 @@ async fn handle_fired(
 ) -> Result<Fire> {
     let pc = crate::debug::evaluate(session.process_mut(), "pc").await?;
     let ours_str = format!("{} :once", armed.expression);
-    let ours = bp::fired_expression(&output).as_deref() == Some(ours_str.as_str());
+    // "Among", not "first": `:trace` hits (count_hits, ADR-47) print the
+    // same match header without stopping, ahead of the one that froze us.
+    let ours = bp::fired_expressions(&output).contains(&ours_str);
     if !ours {
         disarm_ours(session.process_mut(), &armed.expression).await?;
     }

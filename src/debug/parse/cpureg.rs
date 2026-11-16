@@ -45,7 +45,8 @@ impl RegAcc {
     }
 
     fn scan_flags(&mut self, line: &str) {
-        if !line.contains("IMASK=") {
+        // Hatari 2.4 prints "IMASK=6"; 2.6 prints "SR=2400 … IM=4".
+        if !line.contains("IMASK=") && !line.contains(" IM=") {
             return;
         }
         let mut f = SrFlags {
@@ -70,7 +71,7 @@ impl RegAcc {
                 "Z" => f.z = val == "1",
                 "V" => f.v = val == "1",
                 "C" => f.c = val == "1",
-                "IMASK" => f.imask = val.parse().unwrap_or(0),
+                "IMASK" | "IM" => f.imask = val.parse().unwrap_or(0),
                 _ => {}
             }
         }
@@ -170,6 +171,25 @@ mod tests {
         assert!(regs.sr.n);
         assert_eq!(regs.sr.imask, 6);
         assert_eq!(regs.pc, Addr::new(0xdc74));
+    }
+
+    /// Hatari 2.6.1 shape (captured live): "SR=…" prefix and "IM=" key.
+    #[test]
+    fn cpureg_parses_hatari_26_flags_line() {
+        let out = "  D0 FFFF00E4   D1 00000F25   D2 02E00C25   D3 0000FFFF \n\
+  D4 00000050   D5 00100000   D6 00000017   D7 0000032F \n\
+  A0 00000FEC   A1 00000A8C   A2 000037C2   A3 00E0385C \n\
+  A4 00002B16   A5 00000000   A6 FFFF8606   A7 00003794 \n\
+USP  00000000 ISP  00003794 \n\
+SR=2400 T=00 S=1 M=0 X=0 N=0 Z=0 V=0 C=0 IM=4 STP=0\n\
+Prefetch 52b9 (ADD) 0000 (OR) Chip latch 00000000\n\
+00e00802 52b9 0000 0466           addq.l #$01,$00000466 [000000c3]\n\
+Next PC: 00e00808";
+        let regs = parse_cpureg(out).unwrap();
+        assert!(regs.sr.supervisor);
+        assert_eq!(regs.sr.imask, 4);
+        assert_eq!(regs.isp, 0x3794);
+        assert_eq!(regs.pc, Addr::new(0xe00802));
     }
 
     #[test]
